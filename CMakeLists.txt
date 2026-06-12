@@ -1,10 +1,9 @@
 cmake_minimum_required(VERSION 4.1)
 project(tl_assistant LANGUAGES C CXX)
-enable_language(C CXX)
 
-set(CMAKE_CXX_STANDARD 23)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_STANDARD 23)
 
 
 ################################################################################
@@ -19,35 +18,29 @@ endif()
 
 
 ################################################################################
-#For: Policy CMP0146 is not set: The FindCUDA module is removed
-if(POLICY CMP0146)
-    cmake_policy(SET CMP0146 OLD)
-endif()
-
-################################################################################
-set(OpenCV_DIR d:/3rd_party/opencv_4.13.0)
-include(${OpenCV_DIR}/OpenCVConfig.cmake)
-
-set(CUDA_PATH d:/3rd_party/cuda12.8_lib)
+set(CUDA_PATH d:/3rd_party/cuda_v13.3_lib)
 set(CUDA_SDK_ROOT_DIR ${CUDA_PATH})
-set(CUDA_TOOLKIT_ROOT_DIR ${CUDA_PATH})
 set(CMAKE_CUDA_COMPILER ${CUDA_PATH}/bin/nvcc.exe)
 set(CMAKE_CUDA_ARCHITECTURES 86)
-set(CMAKE_CUDA_STANDARD 11)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+set(CMAKE_CUDA_STANDARD 20)
 
-set(ONNX_RUNTIME_ROOT d:/3rd_party/ONNXRuntime-win-x64-gpu-1.25.1)
+set(ONNX_RUNTIME_ROOT d:/3rd_party/ONNXRuntime-win-x64-gpu-1.26.0)
+
+set(OpenCV_DIR d:/3rd_party/opencv_5.0.0)
+include(${OpenCV_DIR}/OpenCVConfig.cmake)
+
 
 ################################################################################
-add_subdirectory(deps/gflags-2.3.0)
 add_subdirectory(deps/json-3.12.0)
 add_subdirectory(deps/spdlog-1.17.0)
 add_subdirectory(deps/yaml-cpp-0.9.0)
 add_subdirectory(deps/zlib-1.3.2)
 
 set(deps_libraries
-    gflags nlohmann_json spdlog::spdlog_header_only yaml-cpp zlibstatic
+    nlohmann_json spdlog::spdlog_header_only yaml-cpp zlibstatic
 )
+
 
 ################################################################################
 set(CMAKE_AUTOUIC ON)

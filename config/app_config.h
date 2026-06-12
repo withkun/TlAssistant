@@ -29,5 +29,4 @@ private:
     class Impl;
     std::unique_ptr<Impl> impl_;
 };
-
 #endif // __INC_APP_CONFIG_H

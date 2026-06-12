@@ -14,29 +14,29 @@
 #include "spdlog/sinks/stdout_color_sinks.h"
 #include "spdlog/sinks/rotating_file_sink.h"
 
+#include "opencv2/opencv.hpp"
 #include "opencv2/core/utils/logger.hpp"
 #include "config/app_config.h"
 #include "config/tl_yaml_config.h"
-#include "gflags/gflags.h"
 
 
-DEFINE_bool(console, true, "show log console");
-DEFINE_string(app_config, "app_config.json", "app config");
-
-DEFINE_string(file_name, "", "file name for open");
-DEFINE_string(output_file, "", "file name for output");
-DEFINE_string(output_dir, "", "output file directory");
-
+const std::string args{
+    "{app_config   | app_config.json    | application config file                   }"
+    "{file_name    |                    | file name for open                        }"
+    "{output_file  |                    | file name for output                      }"
+    "{output_dir   | results/           | result output directory                   }"
+    "{console      | true               | show log console                          }"
+};
 
 // 初始化日志系统
-static void slogInit() {
+static void slogInit(const bool console) {
     std::vector<spdlog::sink_ptr> sinks;
     try {
         // 循环日志rotating_sink
         const std::string logFile("tl_assistant.log");
         sinks.push_back(std::make_shared<spdlog::sinks::rotating_file_sink_mt>(logFile, 50*1024*1024, 100, false));
         // 控制台日志console_sink
-        if (FLAGS_console) {
+        if (console) {
             sinks.push_back(std::make_shared<spdlog::sinks::stdout_color_sink_mt>());
         }
     } catch (const spdlog::spdlog_ex &ex) {
@@ -84,15 +84,15 @@ int main(int argc, char *argv[]) {
     QApplication a(argc, argv);
 
     // 解析命令行参数
-    gflags::ParseCommandLineFlags(&argc, &argv, true);
+    cv::CommandLineParser parser(argc, argv, args);
+    cv::utils::logging::setLogLevel(cv::utils::logging::LogLevel::LOG_LEVEL_INFO);
     AppConfig &appConfig = AppConfig::instance();
     appConfig.load();
 
-    slogInit();
+    slogInit(parser.get<bool>("console"));
     qInstallMessageHandler(qMessageHandler);
     QLoggingCategory::defaultCategory()->setEnabled(QtInfoMsg, true);
     QLoggingCategory::defaultCategory()->setEnabled(QtDebugMsg, true);
-    cv::utils::logging::setLogLevel(cv::utils::logging::LogLevel::LOG_LEVEL_INFO);
 
     QLocale locale;
     QTranslator translator;
@@ -113,12 +113,14 @@ int main(int argc, char *argv[]) {
     }
 
     QString file_name;
-    if (!FLAGS_file_name.empty()) {
-        file_name = QString::fromStdString(FLAGS_file_name);
+    const auto v_file_name = parser.get<std::string>("file_name");
+    if (!v_file_name.empty()) {
+        file_name = QString::fromStdString(v_file_name);
     }
     QString output_dir;
-    if (!FLAGS_output_dir.empty()) {
-        output_dir = QString::fromStdString(FLAGS_output_dir);
+    const auto v_output_dir = parser.get<std::string>("output_dir");
+    if (!v_output_dir.empty()) {
+        output_dir = QString::fromStdString(v_output_dir);
     }
 
     MainWindow w(config_file, config_overrides, file_name, output_dir);
