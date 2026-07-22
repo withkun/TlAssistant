@@ -130,6 +130,7 @@ private:
     TlTrainWidget                                  *train_widget_{nullptr};
     QProcess                                       *sub_process_;
 
+    void retheme();
     void setup_actions();
     void setup_menus();
     void setup_toolbars();
@@ -259,6 +260,7 @@ private:
 
     QAction                *create_mode_{nullptr};
     QAction                *create_rectangle_mode_{nullptr};
+    QAction                *create_oriented_rectangle_mode_{nullptr};
     QAction                *create_circle_mode_{nullptr};
     QAction                *create_line_mode_{nullptr};
     QAction                *create_point_mode_{nullptr};
@@ -273,6 +275,7 @@ private:
     QAction                *paste_{nullptr};
     QAction                *undo_last_point_{nullptr};
     QAction                *remove_point_{nullptr};
+    QAction                *add_point_to_edge_{nullptr};
     QAction                *undo_{nullptr};
 
     QAction                *hide_all_{nullptr};

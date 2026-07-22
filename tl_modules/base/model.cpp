@@ -55,6 +55,7 @@ private:
 };
 
 Model::Impl::Impl() : env_{ORT_LOGGING_LEVEL_WARNING, "SAM", LoggingFunction, nullptr} {
+    sessionOptions_.SetLogSeverityLevel(ORT_LOGGING_LEVEL_WARNING);
     sessionOptions_.SetIntraOpNumThreads(4);
     // 设置图优化级别为最高级别,这里使用最大优化
     sessionOptions_.SetGraphOptimizationLevel(ORT_ENABLE_BASIC);
@@ -69,9 +70,11 @@ Model::Impl::Impl() : env_{ORT_LOGGING_LEVEL_WARNING, "SAM", LoggingFunction, nu
 InferenceSession Model::Impl::load_session(const Blob &blob) {
     InferenceSession session;
     try {
-        std::string model_path = blob.path();
-        const auto wModelFile = std::wstring(model_path.begin(), model_path.end());
+        const std::string model_file = blob.path();
+        const auto wModelFile = std::wstring(model_file.begin(), model_file.end());
         session.session_ = std::make_shared<Ort::Session>(env_, wModelFile.data(), sessionOptions_);
+        // 注意: 此接口输入的是模型数据, 不是模型路径, 如下使用会将文件路径字符串当作ONNX模型的二进制内容解析产生错误.
+        //session.session_ = std::make_shared<Ort::Session>(env_, model_file.data(), model_file.size(), sessionOptions_);
     } catch (const Ort::Exception &exp) {
         SPDLOG_INFO("load model fail: {}, error: {}", blob.path(), exp.what());
         std::cerr << "load model fail: " << blob.path() << ", error: " << exp.what() << std::endl;
@@ -102,12 +105,10 @@ InferenceSession Model::Impl::load_session(const Blob &blob) {
 
 Model::Model() : impl_(new Impl) {
     memoryInfo_ = Ort::MemoryInfo::CreateCpu(OrtDeviceAllocator, OrtMemTypeCPU);
-    std::cerr << "===> create model: " << this << std::endl;
     SPDLOG_INFO("===> create model: {}", static_cast<void *>(this));
 }
 
 Model::~Model() {
-    std::cerr << "===> destroy model: " << this << std::endl;
     SPDLOG_INFO("===> destroy model: {}", static_cast<void *>(this));
 }
 

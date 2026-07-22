@@ -112,6 +112,7 @@ void TlShape::shape_type(QString value) {
     }
     if (!QKey{"polygon",
               "rectangle",
+              "oriented_rectangle",
               "point",
               "line",
               "circle",

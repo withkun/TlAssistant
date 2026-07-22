@@ -1,5 +1,5 @@
-#ifndef __INC_SAM2_H
-#define __INC_SAM2_H
+#ifndef __INC_MODEL_SAM2_H
+#define __INC_MODEL_SAM2_H
 
 #include "base/sam_base.h"
 
@@ -103,4 +103,4 @@ public:
         };
     }
 };
-#endif //__INC_SAM2_H
+#endif //__INC_MODEL_SAM2_H

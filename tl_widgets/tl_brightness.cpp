@@ -6,7 +6,7 @@
 
 
 BrightnessContrast::BrightnessContrast(const QImage &img, const std::function<void(const QImage &img)> &callback, QWidget *parent) : QDialog(parent) {
-    this->setModal(true);
+    this->setModal(false);  // 非模态: 不阻塞主窗口
     this->setWindowTitle("Brightness/Contrast");
     this->setWindowFlags(Qt::Dialog | Qt::MSWindowsFixedSizeDialogHint);
 

@@ -2,7 +2,7 @@
 #include "sam_apis.h"
 
 
-SamSession::SamSession(const std::string &name, const int32_t cache_size) : model_name_(name), cache_size_(cache_size) {
+SamSession::SamSession(std::string name, const int32_t cache_size) : model_name_(std::move(name)), cache_size_(cache_size) {
     memoryInfo_ = Ort::MemoryInfo::CreateCpu(OrtDeviceAllocator, OrtMemTypeCPU);
 }
 
@@ -58,8 +58,7 @@ ImageEmbedding SamSession::get_or_compute_embedding(const cv::Mat &image, const 
         embedding_cache_.pop_front();
     }
 
-    embedding_cache_.push_back({});
-    auto &[key, cache_embedding] = embedding_cache_.back();
+    auto &[key, cache_embedding] = embedding_cache_.emplace_back();
     key = image_id;
     cache_embedding.image_h = image_embedding.image_h;
     cache_embedding.image_w = image_embedding.image_w;

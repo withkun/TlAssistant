@@ -16,11 +16,11 @@ COPY c:\WORK\TlAssistant\build-relwithdebinfo\app_config.json                   
 COPY c:\WORK\TlAssistant\build-relwithdebinfo\bpe_simple_vocab_16e6.txt.gz              Assistant
 
 ::依赖库文件
-COPY d:\3rd_party\opencv_4.13.0\x64\vc16\bin\opencv_world4130.dll                       Assistant
+COPY d:\3rd_party\opencv_5.0.0\x64\vc16\bin\opencv_world500.dll                         Assistant
 
-COPY d:\3rd_party\ONNXRuntime-win-x64-gpu-1.25.0\lib\onnxruntime.dll                    Assistant
-COPY d:\3rd_party\ONNXRuntime-win-x64-gpu-1.25.0\lib\onnxruntime_providers_cuda.dll     Assistant
-COPY d:\3rd_party\ONNXRuntime-win-x64-gpu-1.25.0\lib\onnxruntime_providers_shared.dll   Assistant
+COPY d:\3rd_party\ONNXRuntime-win-x64-gpu-1.27.1\lib\onnxruntime.dll                    Assistant
+COPY d:\3rd_party\ONNXRuntime-win-x64-gpu-1.27.1\lib\onnxruntime_providers_cuda.dll     Assistant
+COPY d:\3rd_party\ONNXRuntime-win-x64-gpu-1.27.1\lib\onnxruntime_providers_shared.dll   Assistant
 
 
 ::应该程序打包

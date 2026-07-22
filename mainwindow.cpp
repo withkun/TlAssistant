@@ -55,7 +55,7 @@ std::vector<QColor> label_colormap() {
     }
     return colormap;
 }
-std::vector<QColor> LABEL_COLORMAP = label_colormap();
+const static std::vector<QColor> LABEL_COLORMAP = label_colormap();
 
 
 const QList<QString> TextToAnnotationCreateMode { "polygon", "rectangle" };
@@ -146,6 +146,30 @@ MainWindow::MainWindow(const QString &config_file,
     QObject::connect(zoom_widget_, &ZoomWidget::valueChanged, this, &MainWindow::paint_canvas);
 
     this->populateModeActions();
+}
+
+void MainWindow::retheme() {
+    // Two things do not follow Qt's palette swap: cached QIcon pixmaps (keyed
+    // by the old tint color) and stylesheet'd widgets (QStyleSheetStyle pins
+    // their palette at polish time, leaving a palette(...) toolbar on the old
+    // scheme).
+    //QtGui::QPixmapCache::clear();
+    //auto app = QtWidgets::QApplication::instance();
+    //if not isinstance(app, QtWidgets.QApplication):
+    //    return
+    //for (auto &widget : app.allWidgets()) {
+    //    //sheet = widget.styleSheet();
+    //    //# Only stylesheets with palette(...) references go stale on a scheme
+    //    //# change; re-applying just those avoids re-polishing composite widgets
+    //    //# (combo boxes, spin boxes) whose re-polish can invalidate siblings.
+    //    //if sheet and "palette(" in sheet:
+    //    //    widget.setStyleSheet(sheet)  # re-resolve palette refs; also repaints
+    //    //else:
+    //    //    widget.update();
+    //}
+    // The AI-button highlight bakes palette colors into its stylesheet (no
+    // palette() ref), so recompute it against the new palette.
+    //highlight_ai_buttons(ai_buttons_highlighted_);
 }
 
 void MainWindow::setup_actions() {
@@ -258,6 +282,11 @@ void MainWindow::setup_actions() {
         &MainWindow::removeSelectedPoint, shortcuts("remove_selected_point"), ":/icons/trash.svg",
         tr("Remove selected point from polygon"), false, false, false
     );
+    add_point_to_edge_ = action(
+        tr("Add Point to Edge"),
+        [this] { canvas_->addPointToEdge(); }, {}, "",
+        tr("Insert a new point at the hovered polygon edge"), false, false, false
+    );
     create_mode_ = action(
         tr("Polygon"),
         [this] { this->switch_canvas_mode(false, "polygon"); }, shortcuts("create_polygon"), ":/icons/polygon.svg",
@@ -272,6 +301,12 @@ void MainWindow::setup_actions() {
         tr("Rectangle"),
         [this] { this->switch_canvas_mode(false, "rectangle"); }, shortcuts("create_rectangle"), ":/icons/rectangle.svg",
         tr("Start drawing rectangles"), false, false, false
+    );
+    create_oriented_rectangle_mode_ = action(
+        tr("Oriented Rectangle"),
+        [this] { this->switch_canvas_mode(false, "oriented_rectangle"); }, shortcuts("create_oriented_rectangle"),
+        ":/icons/oriented_rectangle.svg",
+        tr("Start drawing oriented rectangles"), false, false, false
     );
     create_circle_mode_ = action(
         tr("Circle"),
@@ -408,6 +443,7 @@ void MainWindow::setup_actions() {
     actions_draw_ = {
         {"polygon",            create_mode_},
         {"rectangle",          create_rectangle_mode_},
+        {"oriented_rectangle", create_oriented_rectangle_mode_},
         {"circle",             create_circle_mode_},
         {"point",              create_point_mode_},
         {"line",               create_line_mode_},
@@ -428,6 +464,7 @@ void MainWindow::setup_actions() {
         close_,
         create_mode_,
         create_rectangle_mode_,
+        create_oriented_rectangle_mode_,
         create_circle_mode_,
         create_line_mode_,
         create_point_mode_,
@@ -446,6 +483,7 @@ void MainWindow::setup_actions() {
         delete_,
         undo_,
         undo_last_point_,
+        add_point_to_edge_,
         remove_point_,
     };
     std::ranges::for_each(actions_draw_, [this](auto &p) { actions_context_menu_.push_back(p.second); });
@@ -484,9 +522,11 @@ void MainWindow::setup_actions() {
     //    undo_last_point=undo_last_point,
     //    undo=undo,
     //    remove_point=remove_point,
+    //    add_point_to_edge=add_point_to_edge,
     //    create_mode=create_mode,
     //    edit_mode=edit_mode,
     //    create_rectangle_mode=create_rectangle_mode,
+    //    create_oriented_rectangle_mode=create_oriented_rectangle_mode,
     //    create_circle_mode=create_circle_mode,
     //    create_line_mode=create_line_mode,
     //    create_point_mode=create_point_mode,
@@ -604,7 +644,8 @@ void MainWindow::setup_menus() {
     );
 
     utils::addActions(
-        canvas_->menus_[0], this->actions_context_menu_
+        this->canvas_->menus_[0],
+        this->actions_context_menu_
     );
     utils::addActions(
         canvas_->menus_[1],

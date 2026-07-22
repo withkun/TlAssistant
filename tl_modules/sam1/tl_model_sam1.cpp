@@ -1,4 +1,4 @@
-#include "tl_sam1.h"
+#include "tl_model_sam1.h"
 #include "sam_apis.h"
 #include <fstream>
 

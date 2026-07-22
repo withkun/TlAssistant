@@ -698,6 +698,14 @@ Please select a different model or use AI-Box mode.</source>
         <translation>在悬停的多边形边上插入新顶点</translation>
     </message>
     <message>
+        <source>Oriented Rectangle</source>
+        <translation>旋转矩形</translation>
+    </message>
+    <message>
+        <source>Start drawing oriented rectangles</source>
+        <translation>开始绘制旋转矩形</translation>
+    </message>
+    <message>
         <source>tl assistant</source>
         <translation>瞳乐辅注工具</translation>
     </message>

@@ -1,12 +1,12 @@
 ---
-Language:        Cpp
-# BasedOnStyle:  Google
+Language: Cpp
+BasedOnStyle: Google
 AccessModifierOffset: -2                                        # 访问修饰符 public:, private: 等的缩进
 AlignAfterOpenBracket: Align                                    #
 AlignConsecutiveAssignments: false                              #
 AlignConsecutiveDeclarations: false                             #
 AlignEscapedNewlines: Left                                      #
-AlignOperands:   true                                           #
+AlignOperands: true                                             #
 AlignTrailingComments: true                                     #
 AllowAllParametersOfDeclarationOnNextLine: true                 #
 AllowShortBlocksOnASingleLine: false                            #

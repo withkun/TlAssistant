@@ -3,7 +3,7 @@
 
 #include <string>
 
-class Attach {
+class Attachment {
 public:
     std::string url_;
     std::string hash_;
@@ -11,7 +11,7 @@ public:
 
 class Blob {
 public:
-    Blob(const std::string &url, const std::string &hash, const Attach &attach={});
+    Blob(const std::string &url, const std::string &hash, const Attachment &attach={});
 
     std::string filename() const;
     std::string path() const;
@@ -20,6 +20,6 @@ public:
 
     std::string url_;
     std::string hash_;
-    Attach attachments_;
+    Attachment  attachments_;
 };
 #endif //__INC_BLOB_H

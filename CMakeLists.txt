@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 4.1)
+cmake_minimum_required(VERSION 4.2)
 project(tl_assistant LANGUAGES C CXX)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
@@ -25,7 +25,7 @@ set(CMAKE_CUDA_ARCHITECTURES 86)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 set(CMAKE_CUDA_STANDARD 20)
 
-set(ONNX_RUNTIME_ROOT d:/3rd_party/ONNXRuntime-win-x64-gpu-1.26.0)
+set(ONNX_RUNTIME_ROOT d:/3rd_party/ONNXRuntime-win-x64-gpu-1.27.1)
 
 set(OpenCV_DIR d:/3rd_party/opencv_5.0.0)
 include(${OpenCV_DIR}/OpenCVConfig.cmake)
@@ -108,10 +108,10 @@ set(AI_SOURCES
     tl_modules/base/format_cv.h
     tl_modules/base/format_qt.h
 
-    tl_modules/sam1/tl_sam1.h
-    tl_modules/sam1/tl_sam1.cpp
-    tl_modules/sam2/tl_sam2.h
-    tl_modules/sam2/tl_sam2.cpp
+    tl_modules/sam1/tl_model_sam1.h
+    tl_modules/sam1/tl_model_sam1.cpp
+    tl_modules/sam2/tl_model_sam2.h
+    tl_modules/sam2/tl_model_sam2.cpp
     tl_modules/efficientsam/tl_efficient_sam.h
     tl_modules/efficientsam/tl_efficient_sam.cpp
 
@@ -119,8 +119,8 @@ set(AI_SOURCES
     tl_modules/base/tokenizer.cpp
     tl_modules/yoloworld/tl_yolo_world.h
     tl_modules/yoloworld/tl_yolo_world.cpp
-    tl_modules/sam3/tl_sam3.h
-    tl_modules/sam3/tl_sam3.cpp
+    tl_modules/sam3/tl_model_sam3.h
+    tl_modules/sam3/tl_model_sam3.cpp
 
     tl_modules/sam_apis.h
     tl_modules/sam_apis.cpp
@@ -178,9 +178,9 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
     WIN64 _WIN32_WINNT=0x0601
+    HAVE_QT QT_MESSAGELOGCONTEXT
     ${OPENCV_DEFINITION}
     SPDLOG_USE_STD_FORMAT
-    HAVE_QT QT_MESSAGELOGCONTEXT
 )
 
 target_compile_options(${PROJECT_NAME} PRIVATE

@@ -7,7 +7,7 @@ using EmbeddingCache = std::deque<std::pair<size_t, ImageEmbedding>>;
 
 class SamSession {
 public:
-    explicit SamSession(const std::string &name, int32_t cache_size = 3);
+    explicit SamSession(std::string name, int32_t cache_size = 3);
     ~SamSession() = default;
 
     GenerateResponse run(const cv::Mat &image, size_t image_id,

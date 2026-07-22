@@ -6,7 +6,7 @@
 #include "spdlog/spdlog.h"
 
 
-Blob::Blob(const std::string &url, const std::string &hash, const Attach &attach) {
+Blob::Blob(const std::string &url, const std::string &hash, const Attachment &attach) {
     url_ = url;
     hash_ = hash;
     attachments_ = attach;
@@ -14,7 +14,7 @@ Blob::Blob(const std::string &url, const std::string &hash, const Attach &attach
 
 std::string Blob::filename() const {
     // 查找路径开始位置（跳过协议和域名部分）
-    std::string::size_type pos = url_.find_last_of("/");
+    const auto pos = url_.find_last_of('/');
     if (pos != std::string::npos) {
         return url_.substr(pos+1);
     }
@@ -24,24 +24,26 @@ std::string Blob::filename() const {
 std::string Blob::path() const {
     // 先判断应用进程目录下是否存在models目录, 如果存在则从进程目录获取模型.
     const QString appDirPath = QCoreApplication::applicationDirPath();
-    std::filesystem::path exe_directory{appDirPath.toLocal8Bit().constData()};
-    exe_directory /= "models";
-    if (exists(exe_directory)) {
-        exe_directory /= filename();
-        const std::string path = absolute(exe_directory).string();
-        SPDLOG_INFO("===> path: {}", path);
-        return path;
+    std::filesystem::path path{appDirPath.toLocal8Bit().constData()};
+    path /= "models";
+    if (!std::filesystem::exists(path)) {
+        TCHAR szPath[1024]{};
+        SHGetSpecialFolderPath(nullptr, szPath, CSIDL_PROFILE, 0);
+        path = std::filesystem::path{szPath};
+        path /= ".cache/osam/models/blobs";
     }
 
-    //const auto blobPath = QDir::homePath() + "/.cache/osam/models/blobs/";
-    TCHAR szPath[1024]{};
-    SHGetSpecialFolderPath(nullptr, szPath, CSIDL_PROFILE, 0);
-    std::filesystem::path home_directory{szPath};
-    home_directory /= ".cache/osam/models/blobs";
-    home_directory /= filename();
-    const std::string path = absolute(home_directory).string();
-    SPDLOG_INFO("===> path: {}", path);
-    return path;
+    if (!attachments_.url_.empty()) {
+        std::string safe_hash = hash_;
+        if (const auto pos = safe_hash.find("sha256:"); pos != std::string::npos) {
+            safe_hash.replace(pos, strlen("sha256:"), "sha256-");
+        }
+        path /= safe_hash;
+    }
+    path /= filename();
+
+    SPDLOG_INFO("===> path: {}", path.generic_string());
+    return std::filesystem::absolute(path).generic_string();
 }
 
 void Blob::pull() {

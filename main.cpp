@@ -23,8 +23,7 @@
 const std::string args{
     "{app_config   | app_config.json    | application config file                   }"
     "{file_name    |                    | file name for open                        }"
-    "{output_file  |                    | file name for output                      }"
-    "{output_dir   | results/           | result output directory                   }"
+    "{output_dir   |                    | result output directory                   }"
     "{console      | true               | show log console                          }"
 };
 
@@ -57,7 +56,7 @@ static void slogInit(const bool console) {
     spdlog::set_level(spdlog::level::info);
 
     // 打印输出测试
-    SPDLOG_INFO("程序启动 ...");
+    SPDLOG_INFO("\xE7\xA8\x8B\xE5\xBA\x8F\xE5\x90\xAF\xE5\x8A\xA8 ...");    // 程序启动UTF8编码, 控制台不应显示乱码
     SPDLOG_INFO("Program started ...");
 }
 
