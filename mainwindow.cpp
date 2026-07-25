@@ -22,6 +22,8 @@
 #include <QDirIterator>
 #include <QTimer>
 #include <QApplication>
+#include <QPixmapCache>
+#include <QStyleHints>
 
 #include "config/app_config.h"
 #include "config/tl_yaml_config.h"
@@ -72,7 +74,7 @@ MainWindow::MainWindow(const QString &config_file,
                        const YAML::Node &config_overrides,
                        const QString &file_or_dir,
                        const QString &output_dir)
-    : QMainWindow(), ui_(new Ui::MainWindow), settings_("tl_assistant", "tl_assistant") {
+    : QMainWindow(), ui_(new Ui::MainWindow), window_state_("tl_assistant", "tl_assistant") {
     ui_->setupUi(this);
     this->setWindowTitle(tr("tl assistant"));
 
@@ -100,37 +102,35 @@ MainWindow::MainWindow(const QString &config_file,
 
     this->copied_shapes_ = {};
 
-    this->label_dialog_ = new LabelDialog(
-        this,
-        YAML_VSTR(config_["labels"]),
-        config_["sort_labels"].as<bool>(),
-        config_["show_label_text_field"].as<bool>(),
-        YAML_QSTR(config_["label_completion"]),
-        YAML_QMAP(config_["fit_to_content"]),
-        YAML_QMAP(config_["label_flags"])
-    );
+    this->shape_clipboard_ = new ShapeClipboard();
+
+    this->label_dialog_ = make_label_dialog();
 
     this->prev_opened_dir_ = QString::fromStdString(appConfig.last_work_dir_);
-    this->setup_dock_widgets();
+    this->docks_ = setup_dock_widgets();
 
     this->setAcceptDrops(true);
-    this->setup_canvas();
+    this->canvas_widgets_ = setup_canvas();
 
-    this->setup_actions();
+    this->actions_ = setup_actions();
+    QObject::connect(shape_clipboard_, &ShapeClipboard::availability_changed,
+        [this](bool available){ actions_.paste_->setEnabled(available); }
+    );
     this->scalers_ = {
         { ZoomMode::FIT_WINDOW, [this] { return scaleFitWindow(); } },
         { ZoomMode::FIT_WIDTH, [this] { return scaleFitWidth(); } },
         { ZoomMode::MANUAL_ZOOM, [this] { return 1.; } }
     };
-    this->setup_menus();
+    this->menus_ = setup_menus();
 
     ai_assist_annotation_widget_ = new AiAssistAnnotation(
         QString::fromStdString(appConfig.ai_assist_name_),
-        [this](const std::string &name){ this->canvas_->set_ai_model_name(name); },
-        [this](const std::string &name){ this->canvas_->set_ai_output_format(name); },
+        [this](const std::string &name){ canvas_widgets_.canvas_->set_ai_model_name(name); },
+        [this](const std::string &name){ canvas_widgets_.canvas_->set_ai_output_format(name); },
         this
     );
     ai_assist_annotation_widget_->setEnabled(false);
+    ai_buttons_highlighted_ = false;
 
     ai_text_to_annotation_widget_ = new AiTextToAnnotation(
         appConfig.ai_prompt_name_, [this] { this->submit_ai_prompt(); }, this
@@ -139,13 +139,20 @@ MainWindow::MainWindow(const QString &config_file,
 
     this->setup_toolbars();
 
-    this->setup_status_bar();
+    this->status_bar_ = this->setup_status_bar();
 
     this->setup_app_state(file_or_dir, output_dir);
 
-    QObject::connect(zoom_widget_, &ZoomWidget::valueChanged, this, &MainWindow::paint_canvas);
+    QObject::connect(canvas_widgets_.zoom_widget_, &ZoomWidget::valueChanged, this, &MainWindow::paint_canvas);
 
-    this->populateModeActions();
+    this->populate_mode_actions();
+
+    // colorSchemeChanged fires while setColorScheme is still running, before
+    // the new palette is applied, so connect queued: _retheme runs on the next
+    // event loop pass, against the live palette.
+    QObject::connect(QGuiApplication::styleHints(), &QStyleHints::colorSchemeChanged,
+        this, &MainWindow::retheme, Qt::QueuedConnection
+    );
 }
 
 void MainWindow::retheme() {
@@ -153,26 +160,26 @@ void MainWindow::retheme() {
     // by the old tint color) and stylesheet'd widgets (QStyleSheetStyle pins
     // their palette at polish time, leaving a palette(...) toolbar on the old
     // scheme).
-    //QtGui::QPixmapCache::clear();
-    //auto app = QtWidgets::QApplication::instance();
+    QPixmapCache::clear();
+    //app = QtWidgets.QApplication.instance()
     //if not isinstance(app, QtWidgets.QApplication):
     //    return
-    //for (auto &widget : app.allWidgets()) {
-    //    //sheet = widget.styleSheet();
-    //    //# Only stylesheets with palette(...) references go stale on a scheme
-    //    //# change; re-applying just those avoids re-polishing composite widgets
-    //    //# (combo boxes, spin boxes) whose re-polish can invalidate siblings.
-    //    //if sheet and "palette(" in sheet:
-    //    //    widget.setStyleSheet(sheet)  # re-resolve palette refs; also repaints
-    //    //else:
-    //    //    widget.update();
-    //}
+    for (const auto widget : QApplication::allWidgets()) {
+        const auto sheet = widget->styleSheet();
+        // Only stylesheets with palette(...) references go stale on a scheme
+        // change; re-applying just those avoids re-polishing composite widgets
+        // (combo boxes, spin boxes) whose re-polish can invalidate siblings.
+        if (sheet.contains("palette("))
+            widget->setStyleSheet(sheet);  // re-resolve palette refs; also repaints
+        else
+            widget->update();
+    }
     // The AI-button highlight bakes palette colors into its stylesheet (no
     // palette() ref), so recompute it against the new palette.
-    //highlight_ai_buttons(ai_buttons_highlighted_);
+    highlight_ai_buttons(ai_buttons_highlighted_);
 }
 
-void MainWindow::setup_actions() {
+Actions MainWindow::setup_actions() {
     const auto action = [this](const QString &text, auto slot, const QList<QString> &shortcut={}, const QString &file="", const QString &tip="", bool checkable=false, bool enabled=true, bool checked=false) {
         auto *a = utils::newAction(text, shortcut, file, tip, checkable, enabled, checked);
         QObject::connect(a, &QAction::triggered, this, slot);
@@ -180,247 +187,246 @@ void MainWindow::setup_actions() {
     };
     const auto shortcuts = [this](const std::string &key) { return YAML_KEYS(config_["shortcuts"][key]); };
 
-    about_ = action(
+    auto *about = action(
         tr("&About"),
         &MainWindow::about, {}, ":/icons/question.svg",
         tr("Show about page"), false, true, false
     );
-    save_ = action(
+    auto *save = action(
         tr("&Save\n"),
         &MainWindow::save_label_file, shortcuts("save"), ":/icons/floppy-disk.svg",
         tr("Save labels to file"), false, false, false
     );
-    save_as_ = action(
+    auto *save_as = action(
         tr("&Save As"),
         [this](){ save_label_file(true); }, shortcuts("save_as"), ":/icons/floppy-disk.svg",
         tr("Save labels to a different file"), false, false, false
     );
-    save_auto_ = action(
+    auto *save_auto = action(
         tr("Save &Automatically"),
-        [this](auto x) { save_auto_->setChecked(x); }, {}, ":/icons/save1.svg",
+        [this](auto x) { actions_.save_auto_->setChecked(x); }, {}, ":/icons/save1.svg",
         tr("Save automatically"), true, true, false
     );
-    save_auto_->setChecked(config_["auto_save"].as<bool>());
-    save_with_image_data_ = action(
+    save_auto->setChecked(config_["auto_save"].as<bool>());
+    auto *save_with_image_data = action(
         tr("Save With Image Data"),
         &MainWindow::enableSaveImageWithData, {}, ":/icons/icon-256.png",
         tr("Save image data in label file"), true, true, false
     );
-    change_output_dir_ = action(
+    auto *change_output_dir = action(
         tr("&Change Output Dir"),
         &MainWindow::changeOutputDirDialog, shortcuts("save_to"), ":/icons/folders.svg",
         tr("Change where annotations are loaded/saved"), false, true, false
     );
-    open_ = action(
+    auto *open = action(
         tr("&Open\n"),
         &MainWindow::open_file_with_dialog, shortcuts("open"), ":/icons/folder-open.svg",
         tr("Open image or label file"), false, true, false
     );
-    open_dir_ = action(
+    auto *open_dir = action(
         tr("Open Dir"),
         [this] { open_dir_with_dialog(); }, shortcuts("open_dir"), ":/icons/folder-open.svg",
         tr("Open Dir"), false, true, false
     );
-    close_ = action(
+    auto *close = action(
         tr("&Close"),
         &MainWindow::closeFile, shortcuts("close"), ":/icons/x-circle.svg",
         tr("Close current file"), false, true, false
     );
-    delete_file_ = action(
+    auto *delete_file = action(
         tr("&Delete File"),
         &MainWindow::deleteFile, shortcuts("delete_file"), ":/icons/file-x.svg",
         tr("Delete current label file"), false, false, false
     );
-    toggle_keep_prev_mode_ = action(
+    auto *keep_prev_action = action(
         tr("Keep Previous Annotation"),
         &MainWindow::toggleKeepPrevMode, shortcuts("toggle_keep_prev_mode"), ":/icons/icon-256.png",
-        tr("Toggle \"keep previous annotation\" mode"), true, true, false
+        tr("Toggle \"keep previous annotation\" mode"), true, false, config_["keep_prev"].as<bool>()
     );
-    toggle_keep_prev_mode_->setChecked(config_["keep_prev"].as<bool>());
-    toggle_keep_prev_brightness_contrast_ = action(
+    auto *toggle_keep_prev_brightness_contrast = action(
         tr("Keep Previous Brightness/Contrast"),
         [this] { config_["keep_prev_brightness_contrast"] = !config_["keep_prev_brightness_contrast"].as<bool>(); }, {}, ":/icons/question.svg",
         "", true, true, config_["keep_prev_brightness_contrast"].as<bool>()
     );
-    delete_ = action(
+    auto *delete_ = action(
         tr("Delete Shapes"),
         &MainWindow::deleteSelectedShape, shortcuts("delete_shape"), ":/icons/trash.svg",
         tr("Delete the selected shapes"), false, false, false
     );
-    edit_ = action(
+    auto *edit = action(
         tr("&Edit Label"),
         &MainWindow::edit_label, shortcuts("edit_label"), ":/icons/note-pencil.svg",
         tr("Modify the label of the selected shape"), false, false, false
     );
-    duplicate_ = action(
+    auto *duplicate = action(
         tr("Duplicate Shapes"),
         &MainWindow::duplicateSelectedShape, shortcuts("duplicate_shape"), ":/icons/copy.svg",
         tr("Create a duplicate of the selected shapes"), false, false, false
     );
-    copy_ = action(
+    auto *copy = action(
         tr("Copy Shapes"),
         &MainWindow::copySelectedShape, shortcuts("copy_shape"), ":/icons/copy_clipboard.svg",
         tr("Copy selected shapes to clipboard"), false, false, false
     );
-    paste_ = action(
+    auto *paste = action(
         tr("Paste Shapes"),
         &MainWindow::pasteSelectedShape, shortcuts("paste_shape"), ":/icons/paste.svg",
         tr("Paste copied shapes"), false, false, false
     );
-    undo_last_point_ = action(
+    auto *undo_last_point = action(
         tr("Undo last point"),
-        [this] { canvas_->undoLastPoint(); }, shortcuts("undo_last_point"), ":/icons/arrow-u-up-left.svg",
+        [this] { canvas_widgets_.canvas_->undoLastPoint(); }, shortcuts("undo_last_point"), ":/icons/arrow-u-up-left.svg",
         tr("Undo last drawn point"), false, false, false
     );
-    undo_ = action(
+    auto *undo = action(
         tr("Undo\n"),
-        &MainWindow::undoShapeEdit, shortcuts("undo"), ":/icons/arrow-u-up-left.svg",
+        &MainWindow::undo_shape_edit, shortcuts("undo"), ":/icons/arrow-u-up-left.svg",
         tr("Undo last add and edit of shape"), false, false, false
     );
-    remove_point_ = action(
+    auto *remove_point = action(
         tr("Remove Selected Point"),
         &MainWindow::removeSelectedPoint, shortcuts("remove_selected_point"), ":/icons/trash.svg",
         tr("Remove selected point from polygon"), false, false, false
     );
-    add_point_to_edge_ = action(
+    auto *add_point_to_edge = action(
         tr("Add Point to Edge"),
-        [this] { canvas_->addPointToEdge(); }, {}, "",
+        [this] { canvas_widgets_.canvas_->addPointToEdge(); }, {}, "",
         tr("Insert a new point at the hovered polygon edge"), false, false, false
     );
-    create_mode_ = action(
+    auto *create_mode = action(
         tr("Polygon"),
         [this] { this->switch_canvas_mode(false, "polygon"); }, shortcuts("create_polygon"), ":/icons/polygon.svg",
         tr("Start drawing polygons"), false, false, false
     );
-    edit_mode_ = action(
+    auto *edit_mode = action(
         tr("Edit Shapes"),
         [this] { this->switch_canvas_mode(true); }, shortcuts("edit_shape"), ":/icons/note-pencil.svg",
         tr("Move and edit the selected shapes"), false, false, false
     );
-    create_rectangle_mode_ = action(
+    auto *create_rectangle_mode = action(
         tr("Rectangle"),
         [this] { this->switch_canvas_mode(false, "rectangle"); }, shortcuts("create_rectangle"), ":/icons/rectangle.svg",
         tr("Start drawing rectangles"), false, false, false
     );
-    create_oriented_rectangle_mode_ = action(
+    auto *create_oriented_rectangle_mode = action(
         tr("Oriented Rectangle"),
         [this] { this->switch_canvas_mode(false, "oriented_rectangle"); }, shortcuts("create_oriented_rectangle"),
         ":/icons/oriented_rectangle.svg",
         tr("Start drawing oriented rectangles"), false, false, false
     );
-    create_circle_mode_ = action(
+    auto *create_circle_mode = action(
         tr("Circle"),
         [this] { this->switch_canvas_mode(false, "circle"); }, shortcuts("create_circle"), ":/icons/circle.svg",
         tr("Start drawing circles"), false, false, false
     );
-    create_line_mode_ = action(
+    auto *create_line_mode = action(
         tr("Line"),
         [this] { this->switch_canvas_mode(false, "line"); }, shortcuts("create_line"), ":/icons/line-segment.svg",
         tr("Start drawing lines"), false, false, false
     );
-    create_point_mode_ = action(
+    auto *create_point_mode = action(
         tr("Point"),
         [this] { this->switch_canvas_mode(false, "point"); }, shortcuts("create_point"), ":/icons/circles-four.svg",
         tr("Start drawing points"), false, false, false
     );
-    create_line_strip_mode_ = action(
+    auto *create_line_strip_mode = action(
         tr("LineStrip"),
         [this] { this->switch_canvas_mode(false, "linestrip"); }, shortcuts("create_linestrip"), ":/icons/line-segments.svg",
         tr("Start drawing linestrip. Ctrl+LeftClick ends creation."), false, false, false
     );
-    create_ai_points_to_shape_mode_ = action(
+    auto *create_ai_points_to_shape_mode = action(
         tr("AI-Points"),
         [this] { this->switch_canvas_mode(false, "ai_points_to_shape"); }, shortcuts("create_ai_polygon"), ":/icons/ai-polygon.svg",
         tr("Click points to segment object. Ctrl+LeftClick ends creation."), false, false, false
     );
-    create_ai_box_to_shape_mode_ = action(
+    auto *create_ai_box_to_shape_mode = action(
         tr("AI-Box"),
         [this] { this->switch_canvas_mode(false, "ai_box_to_shape"); }, shortcuts("create_ai_mask"), ":/icons/ai-mask.svg",
         tr("Draw a bounding box to segment object."), false, false, false
     );
-    open_next_img_ = action(
+    auto *open_next_img = action(
         tr("&Next Image"),
         &MainWindow::open_next_image, shortcuts("open_next"), ":/icons/arrow-fat-right.svg",
         tr("Open next (hold Ctrl+Shift to copy labels)"), false, false, false
     );
-    open_prev_img_ = action(
+    auto *open_prev_img = action(
         tr("&Prev Image"),
         &MainWindow::open_prev_image, shortcuts("open_prev"), ":/icons/arrow-fat-left.svg",
         tr("Open prev (hold Ctrl+Shift to copy labels)"), false, false, false
     );
-    keep_prev_scale_ = action(
+    auto *keep_prev_zoom = action(
         tr("&Keep Previous Scale"),
         &MainWindow::enableKeepPrevScale, {}, ":/icons/icon-256.png",
         tr("Keep previous zoom scale"), true, true, false
     );
-    fit_window_ = action(
+    auto *fit_window = action(
         tr("&Fit Window"),
         &MainWindow::setFitWindow, shortcuts("fit_window"), ":/icons/frame-corners.svg",
         tr("Zoom follows window size"), true, false, false
     );
-    fit_width_ = action(
+    auto *fit_width = action(
         tr("Fit &Width"),
         &MainWindow::setFitWidth, shortcuts("fit_width"), ":/icons/frame-arrows-horizontal.svg",
         tr("Zoom follows window width"), true, false, false
     );
-    brightness_contrast_ = action(
+    auto *brightness_contrast = action(
         tr("&Brightness Contrast"),
         [this] { brightnessContrast(); }, {}, ":/icons/brightness-contrast.svg",
         tr("Adjust brightness and contrast"), false, false, false
     );
-    zoom_in_ = action(
+    auto *zoom_in = action(
         tr("Zoom &In"),
         [this] { add_zoom(1.1); }, shortcuts("zoom_in"), ":/icons/magnifying-glass-minus.svg",
         tr("Increase zoom level"), false, false, false
     );
-    zoom_out_ = action(
+    auto *zoom_out = action(
         tr("&Zoom Out"),
         [this] { add_zoom(0.9); }, shortcuts("zoom_out"), ":/icons/magnifying-glass-plus.svg",
         tr("Decrease zoom level"), false, false, false
     );
-    zoom_org_ = action(
+    auto *zoom_org = action(
         tr("&Original size"),
         &MainWindow::set_zoom_to_original, shortcuts("zoom_to_original"), ":/icons/image-square.svg",
         tr("Zoom to original size"), false, false, false
     );
-    reset_layout_ = action(
+    auto *reset_layout = action(
         tr("Reset Layout"),
         &MainWindow::reset_layout, {}, ":/icons/layout-duotone.svg",
         "", false, false, false
     );
-    fill_drawing_ = action(
+    auto *fill_drawing = action(
         tr("Fill Drawing Polygon"),
-        [this] { canvas_->setFillDrawing(fill_drawing_->isChecked()); }, {}, ":/icons/paint-bucket.svg",
+        [this] { canvas_widgets_.canvas_->set_fill_drawing(actions_.fill_drawing_->isChecked()); }, {}, ":/icons/paint-bucket.svg",
         tr("Fill polygon while drawing"), true, true, false
     );
     if (config_["canvas"]["fill_drawing"].as<bool>()) {
-        fill_drawing_->trigger();
+        canvas_widgets_.canvas_->set_fill_drawing(true);
     }
-    hide_all_ = action(
+    auto *hide_all = action(
         tr("&Hide\nShapes"),
         [this] { toggleShapes(false); }, shortcuts("hide_all_shapes"), ":/icons/eye.svg",
         tr("Hide all shapes"), false, false, false
     );
-    show_all_ = action(
+    auto *show_all = action(
         tr("&Show\nShapes"),
         [this] { toggleShapes(true); }, shortcuts("show_all_shapes"), ":/icons/eye.svg",
         tr("Show all shapes"), false, false, false
     );
-    toggle_all_ = action(
+    auto *toggle_all = action(
         tr("&Toggle\nShapes"),
         [this] { toggleShapes(None); }, shortcuts("toggle_all_shapes"), ":/icons/eye.svg",
         tr("Toggle all shapes"), false, false, false
     );
 
-    zoom_action_ = new QWidgetAction(this);
-    const auto zoom_box_layout = new QVBoxLayout();
-    const auto zoom_label = new QLabel(tr("Zoom"));
+    auto *zoom_widget_action = new QWidgetAction(this);
+    auto *zoom_box_layout = new QVBoxLayout();
+    auto *zoom_label = new QLabel(tr("Zoom"));
     zoom_label->setAlignment(Qt::AlignCenter);
     zoom_box_layout->addWidget(zoom_label);
-    zoom_box_layout->addWidget(zoom_widget_);
-    zoom_action_->setDefaultWidget(new QWidget());
-    zoom_action_->defaultWidget()->setLayout(zoom_box_layout);
-    zoom_widget_->setWhatsThis(
+    zoom_box_layout->addWidget(canvas_widgets_.zoom_widget_);
+    zoom_widget_action->setDefaultWidget(new QWidget());
+    zoom_widget_action->defaultWidget()->setLayout(zoom_box_layout);
+    canvas_widgets_.zoom_widget_->setWhatsThis(
         QString(
             tr(
                 "Zoom in or out of the image. Also accessible with "
@@ -431,134 +437,132 @@ void MainWindow::setup_actions() {
             tr("Ctrl+Wheel")
         )
     );
-    zoom_widget_->setEnabled(false);
+    canvas_widgets_.zoom_widget_->setEnabled(false);
 
     this->zoom_mode_ = ZoomMode::FIT_WINDOW;
-    fit_window_->setChecked(true);
+    fit_window->setChecked(true);
 
-    QObject::connect(canvas_, &Canvas::vertexSelected, [this](bool value){ remove_point_->setEnabled(value); });
-    QObject::connect(canvas_, &Canvas::aiAssistSubmit, this, &MainWindow::slotTaskSubmit);
-    QObject::connect(canvas_, &Canvas::aiAssistFinish, this, &MainWindow::slotTaskFinish);
+    QObject::connect(canvas_widgets_.canvas_, &Canvas::vertexSelected, [this](bool value){ actions_.remove_point_->setEnabled(value); });
+    QObject::connect(canvas_widgets_.canvas_, &Canvas::aiAssistSubmit, this, &MainWindow::slotTaskSubmit);
+    QObject::connect(canvas_widgets_.canvas_, &Canvas::aiAssistFinish, this, &MainWindow::slotTaskFinish);
 
-    actions_draw_ = {
-        {"polygon",            create_mode_},
-        {"rectangle",          create_rectangle_mode_},
-        {"oriented_rectangle", create_oriented_rectangle_mode_},
-        {"circle",             create_circle_mode_},
-        {"point",              create_point_mode_},
-        {"line",               create_line_mode_},
-        {"linestrip",          create_line_strip_mode_},
-        {"ai_points_to_shape", create_ai_points_to_shape_mode_},
-        {"ai_box_to_shape",    create_ai_box_to_shape_mode_},
+    std::list<QPair<QString, QAction *>> draw = {
+        {"polygon",            create_mode},
+        {"rectangle",          create_rectangle_mode},
+        {"oriented_rectangle", create_oriented_rectangle_mode},
+        {"circle",             create_circle_mode},
+        {"point",              create_point_mode},
+        {"line",               create_line_mode},
+        {"linestrip",          create_line_strip_mode},
+        {"ai_points_to_shape", create_ai_points_to_shape_mode},
+        {"ai_box_to_shape",    create_ai_box_to_shape_mode},
     };
-
-    actions_zoom_ = {
-        //zoom_widget_,
-        zoom_in_,
-        zoom_out_,
-        zoom_org_,
-        fit_window_,
-        fit_width_
+    std::list<QAction *> zoom = {
+        //self._canvas_widgets.zoom_widget,
+        zoom_in,
+        zoom_out,
+        zoom_org,
+        fit_window,
+        fit_width
     };
-    actions_on_load_active_ = {
-        close_,
-        create_mode_,
-        create_rectangle_mode_,
-        create_oriented_rectangle_mode_,
-        create_circle_mode_,
-        create_line_mode_,
-        create_point_mode_,
-        create_line_strip_mode_,
-        create_ai_points_to_shape_mode_,
-        create_ai_box_to_shape_mode_,
-        brightness_contrast_,
+    std::list<QAction *> on_load_active = {
+        close,
+        create_mode,
+        create_rectangle_mode,
+        create_oriented_rectangle_mode,
+        create_circle_mode,
+        create_line_mode,
+        create_point_mode,
+        create_line_strip_mode,
+        create_ai_points_to_shape_mode,
+        create_ai_box_to_shape_mode,
+        brightness_contrast,
     };
-    actions_on_shapes_present_ = {save_as_, hide_all_, show_all_, toggle_all_};
-    std::list<QAction *> context_menu = {
-        edit_mode_,
-        edit_,
-        duplicate_,
-        copy_,
-        paste_,
+    std::list<QAction *> on_shapes_present = {save_as, hide_all, show_all, toggle_all};
+    std::list<QObject *> context_menu = {
+        edit_mode,
+        edit,
+        duplicate,
+        copy,
+        paste,
         delete_,
-        undo_,
-        undo_last_point_,
-        add_point_to_edge_,
-        remove_point_,
+        undo,
+        undo_last_point,
+        add_point_to_edge,
+        remove_point,
     };
-    std::ranges::for_each(actions_draw_, [this](auto &p) { actions_context_menu_.push_back(p.second); });
-    std::ranges::for_each(context_menu, [this](auto &a) { actions_context_menu_.push_back(a); });
-    actions_edit_menu_ = {
-        edit_,
-        duplicate_,
-        copy_,
-        paste_,
+    std::ranges::for_each(draw, [&](auto &p) { context_menu.push_back(p.second); });
+    std::list<QAction *> edit_menu = {
+        edit,
+        duplicate,
+        copy,
+        paste,
         delete_,
         nullptr,
-        undo_,
-        undo_last_point_,
+        undo,
+        undo_last_point,
         nullptr,
-        remove_point_,
+        remove_point,
         nullptr,
-        toggle_keep_prev_mode_,
+        keep_prev_action,
     };
-    //return _Actions(
-    //    about=about,
-    //    save=save,
-    //    save_as=save_as,
-    //    save_auto=save_auto,
-    //    save_with_image_data=save_with_image_data,
-    //    change_output_dir=change_output_dir,
-    //    open=open_,
-    //    close=close,
-    //    delete_file=delete_file,
-    //    toggle_keep_prev_mode=toggle_keep_prev_mode,
-    //    toggle_keep_prev_brightness_contrast=toggle_keep_prev_brightness_contrast,
-    //    delete=delete,
-    //    edit=edit,
-    //    duplicate=duplicate,
-    //    copy=copy,
-    //    paste=paste,
-    //    undo_last_point=undo_last_point,
-    //    undo=undo,
-    //    remove_point=remove_point,
-    //    add_point_to_edge=add_point_to_edge,
-    //    create_mode=create_mode,
-    //    edit_mode=edit_mode,
-    //    create_rectangle_mode=create_rectangle_mode,
-    //    create_oriented_rectangle_mode=create_oriented_rectangle_mode,
-    //    create_circle_mode=create_circle_mode,
-    //    create_line_mode=create_line_mode,
-    //    create_point_mode=create_point_mode,
-    //    create_line_strip_mode=create_line_strip_mode,
-    //    create_ai_polygon_mode=create_ai_polygon_mode,
-    //    create_ai_mask_mode=create_ai_mask_mode,
-    //    open_next_img=open_next_img,
-    //    open_prev_img=open_prev_img,
-    //    keep_prev_scale=keep_prev_scale,
-    //    fit_window=fit_window,
-    //    fit_width=fit_width,
-    //    brightness_contrast=brightness_contrast,
-    //    zoom_in=zoom_in,
-    //    zoom_out=zoom_out,
-    //    zoom_org=zoom_org,
-    //    reset_layout=reset_layout,
-    //    fill_drawing=fill_drawing,
-    //    hide_all=hide_all,
-    //    show_all=show_all,
-    //    toggle_all=toggle_all,
-    //    open_dir=open_dir,
-    //    zoom_widget_action=zoom_widget_action,
-    //    draw=draw,
-    //    zoom=zoom,
-    //    on_load_active=on_load_active,
-    //    on_shapes_present=on_shapes_present,
-    //    context_menu=context_menu,
-    //    edit_menu=edit_menu,
-    //)
+    return Actions{
+        .about_ = about,
+        .save_ = save,
+        .save_as_ = save_as,
+        .save_auto_ = save_auto,
+        .save_with_image_data_ = save_with_image_data,
+        .change_output_dir_ = change_output_dir,
+        .open_ = open,
+        .close_ = close,
+        .delete_file_ = delete_file,
+        .toggle_keep_prev_mode_ = keep_prev_action,
+        .toggle_keep_prev_brightness_contrast_ = toggle_keep_prev_brightness_contrast,
+        .delete_ = delete_,
+        .edit_ = edit,
+        .duplicate_ = duplicate,
+        .copy_ = copy,
+        .paste_ = paste,
+        .undo_last_point_ = undo_last_point,
+        .undo_ = undo,
+        .add_point_to_edge_ = add_point_to_edge,
+        .remove_point_ = remove_point,
+        .create_mode_ = create_mode,
+        .edit_mode_ = edit_mode,
+        .create_rectangle_mode_ = create_rectangle_mode,
+        .create_oriented_rectangle_mode_ = create_oriented_rectangle_mode,
+        .create_circle_mode_ = create_circle_mode,
+        .create_line_mode_ = create_line_mode,
+        .create_point_mode_ = create_point_mode,
+        .create_line_strip_mode_ = create_line_strip_mode,
+        .create_ai_points_to_shape_mode_ = create_ai_points_to_shape_mode,
+        .create_ai_box_to_shape_mode_ = create_ai_box_to_shape_mode,
+        .open_next_img_ = open_next_img,
+        .open_prev_img_ = open_prev_img,
+        .keep_prev_zoom_ = keep_prev_zoom,
+        .fit_window_ = fit_window,
+        .fit_width_ = fit_width,
+        .brightness_contrast_ = brightness_contrast,
+        .zoom_in_ = zoom_in,
+        .zoom_out_ = zoom_out,
+        .zoom_org_ = zoom_org,
+        .reset_layout_ = reset_layout,
+        .fill_drawing_ = fill_drawing,
+        .hide_all_ = hide_all,
+        .show_all_ = show_all,
+        .toggle_all_ = toggle_all,
+        .open_dir_ = open_dir,
+        .zoom_widget_action_ = zoom_widget_action,
+        .draw_ = draw,
+        .zoom_ = zoom,
+        .on_load_active_ = on_load_active,
+        .on_shapes_present_ = on_shapes_present,
+        .context_menu_ = context_menu,
+        .edit_menu_ = edit_menu,
+    };
 }
 
-void MainWindow::setup_menus() {
+Menus MainWindow::setup_menus() {
     const auto action = [this](const QString &text, auto slot, const QList<QString> &shortcut={}, const QString &file="", const QString &tip="", bool checkable=false, bool enabled=true, bool checked=false) {
         auto *a = utils::newAction(text, shortcut, file, tip, checkable, enabled, checked);
         QObject::connect(a, &QAction::triggered, this, slot);
@@ -566,102 +570,105 @@ void MainWindow::setup_menus() {
     };
     const auto shortcuts = [this](const std::string &key) { return YAML_KEYS(config_["shortcuts"][key]); };
 
-    quit_ = action(
+    auto *quit_ = action(
         tr("&Quit"),
         &MainWindow::close, shortcuts("quit"), ":/icons/quit.png",
         tr("Quit application"), false, true, false
     );
-    open_config_ = action(
+    auto *open_config_ = action(
         tr("Preferences…"),
         &MainWindow::open_config_file, {"Ctrl+Shift+,"}, ":/icons/icon-256.png",
         tr("Open config file in text editor"), false, true, false
     );
     open_config_->setMenuRole(QAction::PreferencesRole);
-    help_ = action(
+    auto *help_ = action(
         tr("&Tutorial"),
         &MainWindow::tutorial, {}, ":/icons/question.svg",
         tr("Show tutorial page"), false, true, false
     );
 
-    file_menu_ = menu(tr("&File"));
-    edit_menu_ = menu(tr("&Edit"));
-    view_menu_ = menu(tr("&View"));
-    help_menu_ = menu(tr("&Help"));
-
-    label_menu_ = new QMenu();
-    utils::addActions(label_menu_, {edit_, delete_});
-    shape_list_->setContextMenuPolicy(Qt::CustomContextMenu);
-    QObject::connect(shape_list_, &ShapeListView::customContextMenuRequested, this, &MainWindow::popLabelListMenu);
+    auto *file_menu = menu(tr("&File"));
+    auto *edit_menu = menu(tr("&Edit"));
+    auto *view_menu = menu(tr("&View"));
+    auto *help_menu = menu(tr("&Help"));
+    auto *label_menu_ = new QMenu();
+    utils::addActions(label_menu_, { actions_.edit_, actions_.delete_ });
+    docks_.shape_list_->setContextMenuPolicy(
+        Qt::ContextMenuPolicy::CustomContextMenu
+    );
+    QObject::connect(docks_.shape_list_, &ShapeListView::customContextMenuRequested, this,
+        &MainWindow::show_label_list_menu
+    );
 
     utils::addActions(
-        file_menu_,
+        file_menu,
         {
-            open_,
-            open_next_img_,
-            open_prev_img_,
-            open_dir_,
-            save_,
-            save_as_,
-            save_auto_,
-            change_output_dir_,
-            save_with_image_data_,
-            close_,
-            delete_file_,
+            actions_.open_,
+            actions_.open_next_img_,
+            actions_.open_prev_img_,
+            actions_.open_dir_,
+            actions_.save_,
+            actions_.save_as_,
+            actions_.save_auto_,
+            actions_.change_output_dir_,
+            actions_.save_with_image_data_,
+            actions_.close_,
+            actions_.delete_file_,
             nullptr,
             open_config_,
             nullptr,
             quit_
         }
     );
-    utils::addActions(help_menu_, {help_, about_});
+    utils::addActions(help_menu, {help_, actions_.about_});
     utils::addActions(
-        view_menu_,
+        view_menu,
         {
-            flags_dock_->toggleViewAction(),
-            label_dock_->toggleViewAction(),
-            shape_dock_->toggleViewAction(),
-            files_dock_->toggleViewAction(),
+            docks_.flag_dock_->toggleViewAction(),
+            docks_.label_dock_->toggleViewAction(),
+            docks_.shape_dock_->toggleViewAction(),
+            docks_.file_dock_->toggleViewAction(),
             nullptr,
-            reset_layout_,
+            actions_.reset_layout_,
             nullptr,
-            fill_drawing_,
+            actions_.fill_drawing_,
             nullptr,
-            hide_all_,
-            show_all_,
-            toggle_all_,
+            actions_.hide_all_,
+            actions_.show_all_,
+            actions_.toggle_all_,
             nullptr,
-            zoom_in_,
-            zoom_out_,
-            zoom_org_,
-            keep_prev_scale_,
+            actions_.zoom_in_,
+            actions_.zoom_out_,
+            actions_.zoom_org_,
+            actions_.keep_prev_zoom_,
             nullptr,
-            fit_window_,
-            fit_width_,
+            actions_.fit_window_,
+            actions_.fit_width_,
             nullptr,
-            brightness_contrast_,
-            toggle_keep_prev_brightness_contrast_,
+            actions_.brightness_contrast_,
+            actions_.toggle_keep_prev_brightness_contrast_,
         }
     );
 
     utils::addActions(
-        this->canvas_->menus_[0],
-        this->actions_context_menu_
+        canvas_widgets_.canvas_->context_menus_.without_selection,
+        this->actions_.context_menu_
     );
     utils::addActions(
-        canvas_->menus_[1],
+        canvas_widgets_.canvas_->context_menus_.with_selection,
         {
-            action("&Copy here", [this] { this->copyShape(); }),
-            action("&Move here", [this] { this->moveShape(); }),
+            action("&Copy here", [this] { this->copy_shape(); }),
+            action("&Move here", [this] { this->move_shape(); }),
         }
     );
 
-    //return _Menus(
-    //    file=file_menu,
-    //    edit=edit_menu,
-    //    view=view_menu,
-    //    help=help_menu,
-    //    label_list=label_menu,
-    //)
+    return Menus{
+        .file_ = file_menu,
+        .edit_ = edit_menu,
+        .view_ = view_menu,
+        .help_ = help_menu,
+        .label_list_ = label_menu_
+    };
 }
 
 void MainWindow::setup_toolbars() {
@@ -676,21 +683,21 @@ void MainWindow::setup_toolbars() {
         new TlToolBar(
             "Tools",
             {
-                open_,
-                open_dir_,
-                open_prev_img_,
-                open_next_img_,
-                save_,
-                delete_file_,
+                actions_.open_,
+                actions_.open_dir_,
+                actions_.open_prev_img_,
+                actions_.open_next_img_,
+                actions_.save_,
+                actions_.delete_file_,
                 nullptr,
-                edit_mode_,
-                duplicate_,
-                delete_,
-                undo_,
-                brightness_contrast_,
+                actions_.edit_mode_,
+                actions_.duplicate_,
+                actions_.delete_,
+                actions_.undo_,
+                actions_.brightness_contrast_,
                 nullptr,
-                fit_window_,
-                zoom_action_,
+                actions_.fit_window_,
+                actions_.zoom_widget_action_,
                 nullptr,
                 select_ai_model_,
                 nullptr,
@@ -703,9 +710,9 @@ void MainWindow::setup_toolbars() {
     );
 
     std::list<QAction *> draw_actions;
-    std::ranges::for_each(actions_draw_, [&draw_actions](auto &item) { if (!item.first.startsWith("ai_")) { draw_actions.push_back(item.second); } });
+    std::ranges::for_each(actions_.draw_, [&draw_actions](auto &item) { if (!item.first.startsWith("ai_")) { draw_actions.push_back(item.second); } });
     draw_actions.push_back(nullptr);
-    std::ranges::for_each(actions_draw_, [&draw_actions](auto &item) { if (item.first.startsWith("ai_")) { draw_actions.push_back(item.second); } });
+    std::ranges::for_each(actions_.draw_, [&draw_actions](auto &item) { if (item.first.startsWith("ai_")) { draw_actions.push_back(item.second); } });
     this->addToolBar(
         Qt::LeftToolBarArea,
         new TlToolBar(
@@ -716,8 +723,9 @@ void MainWindow::setup_toolbars() {
             this->font()
         )
     );
-
-    QObject::connect(ai_assist_annotation_widget_, &AiAssistAnnotation::hover_highlight_requested, this, &MainWindow::highlight_ai_buttons);
+    QObject::connect(ai_assist_annotation_widget_, &AiAssistAnnotation::hover_highlight_requested, this,
+        &MainWindow::highlight_ai_buttons
+    );
 }
 
 void MainWindow::setup_app_state(const QString &file_or_dir, const QString &output_dir) {
@@ -727,34 +735,40 @@ void MainWindow::setup_app_state(const QString &file_or_dir, const QString &outp
     this->label_file_;
     this->image_path_;
     this->prev_image_path_;
-    this->other_data_ = nullptr;
     this->zoom_values_ = {};
     this->brightness_contrast_values_ = {};
     this->scroll_values_ = {
         {Qt::Horizontal, {}},
         {Qt::Vertical, {}}
-    }; // key=filename, value=scroll_value
+    };
 
     if (!config_["file_search"].IsNull()) {
-        files_search_->setText(YAML_QSTR(config_["file_search"]));
+        docks_.file_search_->setText(YAML_QSTR(config_["file_search"]));
     }
 
     default_state_ = saveState();
     //
     // XXX: Could be completely declarative.
-    // Restore application settings.
-    //settings_ = QSettings("tl_assistant", "tl_assistant");
+    // Restore the window geometry and dock layout (separate from the user
+    // Config; this Qt store holds only window state).
+    //window_state_ = QSettings("tl_assistant", "tl_assistant");
     //
     // Bump this when dock/toolbar layout changes to reset window state
     // for users upgrading from an older version.
     int32_t SETTINGS_VERSION = 1;
-    if (settings_.value("settingsVersion", 0).toInt() != SETTINGS_VERSION) {
+    if (window_state_.value("settingsVersion", 0).toInt() != SETTINGS_VERSION) {
         reset_layout();
-        settings_.setValue("settingsVersion", SETTINGS_VERSION);
+        window_state_.setValue("settingsVersion", SETTINGS_VERSION);
     }
-    this->resize(this->settings_.value("window/size", QSize(900, 500)).toSize());
-    this->move(this->settings_.value("window/position", QPoint(0, 0)).toPoint());
-    this->restoreState(this->settings_.value("window/state", QByteArray()).toByteArray());
+    this->resize(
+        this->window_state_.value("window/size", QSize(900, 500)).toSize()
+    );
+    this->move(
+        this->window_state_.value("window/position", QPoint(0, 0)).toPoint()
+    );
+    this->restoreState(
+        this->window_state_.value("window/state", QByteArray()).toByteArray()
+    );
     // Recover window position when the saved screen is no longer connected.
     if (std::ranges::none_of(QApplication::screens(), [this](auto &s) {
             return s->availableGeometry().intersects(this->frameGeometry());
@@ -768,108 +782,111 @@ void MainWindow::setup_app_state(const QString &file_or_dir, const QString &outp
     }
 }
 
-void MainWindow::setup_status_bar() {
-    this->message_ = new QLabel(tr("%1 started.").arg(tr("tl assistant")));
-    this->stats_ = new StatusStats();
-    this->statusBar()->addWidget(message_, 1);
-    this->statusBar()->addWidget(stats_, 0);
+StatusBarWidgets MainWindow::setup_status_bar() {
+    auto *message = new QLabel(tr("%1 started.").arg(tr("tl assistant")));
+    auto *stats = new StatusStats();
+    this->statusBar()->addWidget(message, 1);
+    this->statusBar()->addWidget(stats, 0);
     this->statusBar()->show();
-    //return _StatusBarWidgets(message=message, stats=stats)
+    return StatusBarWidgets{.message_ = message, .stats_ = stats};
 }
 
-void MainWindow::setup_canvas() {
-    zoom_widget_ = new ZoomWidget();
+CanvasWidgets MainWindow::setup_canvas() {
+    auto *zoom_widget = new ZoomWidget();
 
-    canvas_ = new Canvas(
+    auto *canvas = new Canvas(
         config_["epsilon"].as<float>(),
         YAML_QSTR(config_["canvas"]["double_click"]),
         config_["canvas"]["num_backups"].as<int32_t>(),
-        YAML_QMAP(config_["canvas"]["crosshair"])
+        YAML_QMAP(config_["canvas"]["crosshair"]),
+        config_["canvas"][
+            "allow_out_of_bounds_points"
+        ].as<bool>()
     );
-    QObject::connect(canvas_, &Canvas::zoomRequest, this, &MainWindow::zoom_requested);
-    QObject::connect(canvas_, &Canvas::mouseMoved, this, &MainWindow::update_status_stats);
-    QObject::connect(canvas_, &Canvas::statusUpdated, [this](const auto &text) {
-        this->message_->setText(text); }
+    QObject::connect(canvas, &Canvas::zoomRequest, this, &MainWindow::zoom_requested);
+    QObject::connect(canvas, &Canvas::mouseMoved, this, &MainWindow::update_status_stats);
+    QObject::connect(canvas, &Canvas::statusUpdated, [this](const auto &text) {
+        status_bar_.message_->setText(text); }
     );
 
     scroll_area_ = new QScrollArea();
-    scroll_area_->setWidget(canvas_);
+    scroll_area_->setWidget(canvas);
     scroll_area_->setWidgetResizable(true);
-    scroll_bars_ = {
+    QMap<Qt::Orientation, QScrollBar *> scroll_bars {
         { Qt::Vertical, this->scroll_area_->verticalScrollBar() },
         { Qt::Horizontal, this->scroll_area_->horizontalScrollBar() }
     };
-    QObject::connect(canvas_, &Canvas::scrollRequest, this, &MainWindow::scrollRequest);
+    QObject::connect(canvas, &Canvas::scrollRequest, this, &MainWindow::scrollRequest);
 
-    QObject::connect(canvas_, &Canvas::newShape, this, &MainWindow::newShape);
-    QObject::connect(canvas_, &Canvas::shapeMoved, this, &MainWindow::setDirty);
-    QObject::connect(canvas_, &Canvas::selectionChanged, this, &MainWindow::shapeSelectionChanged);
-    QObject::connect(canvas_, &Canvas::drawingPolygon, this, &MainWindow::toggleDrawingSensitive);
+    QObject::connect(canvas, &Canvas::newShape, this, &MainWindow::newShape);
+    QObject::connect(canvas, &Canvas::shapeMoved, this, &MainWindow::mark_dirty);
+    QObject::connect(canvas, &Canvas::selectionChanged, this, &MainWindow::shapeSelectionChanged);
+    QObject::connect(canvas, &Canvas::drawingPolygon, this, &MainWindow::on_drawing_polygon_changed);
 
     this->setCentralWidget(scroll_area_);
 
-    //return _CanvasWidgets(
-    //    canvas=canvas,
-    //    zoom_widget=zoom_widget,
-    //    scroll_bars=scroll_bars,
-    //)
+    return CanvasWidgets{
+        .canvas_ = canvas,
+        .zoom_widget_ = zoom_widget,
+        .scroll_bars_ = scroll_bars
+    };
 }
 
-void MainWindow::setup_dock_widgets() {
-    this->flags_list_ = new QListWidget();
-    this->flags_dock_ = new QDockWidget(tr("Flags"), this);
-    this->flags_dock_->setObjectName("Flags");
+DockWidgets MainWindow::setup_dock_widgets() {
+    auto *flag_list = new QListWidget();
+    auto *flag = new QDockWidget(tr("Flags"), this);
+    flag->setObjectName("Flags");
     if (!this->config_["flags"].IsNull()) {
-        this->load_flags(this->config_["flags"], this->flags_list_);
+        this->load_flags(this->config_["flags"], flag_list);
     }
-    this->flags_dock_->setWidget(this->flags_list_);
-    QObject::connect(flags_list_, &QListWidget::itemChanged, this, &MainWindow::setDirty);
+    flag->setWidget(flag_list);
+    QObject::connect(flag_list, &QListWidget::itemChanged, this, &MainWindow::mark_dirty);
 
-    this->shape_list_ =  new ShapeListView();   // LabelListWidget()
-    QObject::connect(shape_list_, &ShapeListView::itemSelectionChanged, this, &MainWindow::label_selection_changed);
-    QObject::connect(shape_list_, &ShapeListView::itemDoubleClicked, this, &MainWindow::edit_label);
-    QObject::connect(shape_list_, &ShapeListView::itemChanged, this, &MainWindow::labelItemChanged);
-    QObject::connect(shape_list_, &ShapeListView::itemDropped, this, &MainWindow::labelOrderChanged);
-    this->shape_dock_ = new QDockWidget(tr("Annotation List"), this);
-    this->shape_dock_->setObjectName("Labels");
-    this->shape_dock_->setWidget(this->shape_list_);
+    auto *shape_list =  new ShapeListView();    // LabelListWidget()
+    QObject::connect(shape_list, &ShapeListView::itemSelectionChanged, this, &MainWindow::label_selection_changed);
+    QObject::connect(shape_list, &ShapeListView::itemDoubleClicked, this, &MainWindow::edit_label);
+    QObject::connect(shape_list, &ShapeListView::itemChanged, this, &MainWindow::labelItemChanged);
+    QObject::connect(shape_list, &ShapeListView::itemDropped, this, &MainWindow::labelOrderChanged);
+    auto *shape = new QDockWidget(tr("Annotation List"), this);
+    shape->setObjectName("Labels");
+    shape->setWidget(shape_list);
 
-    this->label_list_ =  new LabelList();    // UniqueLabelQListWidget()
-    this->label_list_->setToolTip(
+    auto *label_list =  new LabelList();        // UniqueLabelQListWidget()
+    label_list->setToolTip(
         tr("Select label to start annotating for it. Press 'Esc' to deselect.")
     );
     if (!config_["labels"].IsNull()) {
         for (auto &lbl : YAML_KEYS(config_["labels"]))
-            this->label_list_->add_label_item(
+            label_list->add_label_item(
                 lbl,
-                get_rgb_by_label(lbl, label_list_)
+                get_rgb_by_label(lbl, label_list)
             );
     }
-    this->label_dock_ = new QDockWidget(tr("Label List"), this);
-    this->label_dock_->setObjectName("Label List");
-    this->label_dock_->setWidget(this->label_list_);
+    auto *label = new QDockWidget(tr("Label List"), this);
+    label->setObjectName("Label List");
+    label->setWidget(label_list);
 
-    files_search_ = new QLineEdit();
-    files_search_->setPlaceholderText(tr("Search Filename"));
-    QObject::connect(files_search_, &QLineEdit::textChanged, this, &MainWindow::fileSearchChanged);
-    docks_files_list_ = new QListWidget();
-    QObject::connect(docks_files_list_, &QListWidget::itemSelectionChanged, this, &MainWindow::file_list_item_selection_changed);
+    auto *file_search = new QLineEdit();
+    file_search->setPlaceholderText(tr("Search Filename"));
+    QObject::connect(file_search, &QLineEdit::textChanged, this, &MainWindow::on_file_search_changed);
+    auto *file_list = new QListWidget();
+    QObject::connect(file_list, &QListWidget::itemSelectionChanged, this, &MainWindow::file_list_item_selection_changed);
     auto *file_list_layout = new QVBoxLayout();
     file_list_layout->setContentsMargins(0, 0, 0, 0);
     file_list_layout->setSpacing(0);
-    file_list_layout->addWidget(files_search_);
-    file_list_layout->addWidget(docks_files_list_);
-    this->files_dock_ = new QDockWidget(tr("File List"), this);
-    this->files_dock_->setObjectName("Files");
+    file_list_layout->addWidget(file_search);
+    file_list_layout->addWidget(file_list);
+    auto *file = new QDockWidget(tr("File List"), this);
+    file->setObjectName("Files");
     auto *file_list_container = new QWidget();
     file_list_container->setLayout(file_list_layout);
-    this->files_dock_->setWidget(file_list_container);
+    file->setWidget(file_list_container);
 
     for (auto &[config_key, dock_widget] : std::map<std::string, QDockWidget *>{
-        {"flag_dock", flags_dock_},
-        {"label_dock", label_dock_},
-        {"shape_dock", shape_dock_},
-        {"file_dock", files_dock_}
+        {"flag_dock", flag},
+        {"label_dock", label},
+        {"shape_dock", shape},
+        {"file_dock", file}
     }) {
         auto features = QDockWidget::DockWidgetFeatures();
         if (config_[config_key]["closable"].as<bool>())
@@ -883,17 +900,17 @@ void MainWindow::setup_dock_widgets() {
             dock_widget->setVisible(false);
         this->addDockWidget(Qt::RightDockWidgetArea, dock_widget);
     }
-    //return _DockWidgets(
-    //    flag_dock=flag,
-    //    flag_list=flag_list,
-    //    shape_dock=shape,
-    //    label_list=label_list,
-    //    label_dock=label,
-    //    unique_label_list=unique_label_list,
-    //    file_dock=file,
-    //    file_search=file_search,
-    //    file_list=file_list,
-    //)
+    return DockWidgets{
+        .flag_dock_ = flag,
+        .flag_list_ = flag_list,
+        .shape_dock_ = shape,
+        .shape_list_ = shape_list,
+        .label_dock_ = label,
+        .label_list_ = label_list,
+        .file_dock_ = file,
+        .file_search_ = file_search,
+        .file_list_ = file_list,
+    };
 }
 
 QString MainWindow::load_config(
@@ -937,49 +954,41 @@ QMenu *MainWindow::menu(const QString &title, const std::list<QObject *> &action
 }
 // Support Functions
 
-bool MainWindow::noShapes() {
-    return shape_list_->empty();
+bool MainWindow::has_no_shapes() const {
+    return docks_.shape_list_->empty();
 }
 
-void MainWindow::populateModeActions() {
-    canvas_->menus_[0]->clear();
+void MainWindow::populate_mode_actions() {
+    canvas_widgets_.canvas_->context_menus_.without_selection->clear();
     utils::addActions(
-        this->canvas_->menus_[0], actions_context_menu_
+        canvas_widgets_.canvas_->context_menus_.without_selection, actions_.context_menu_
     );
-    this->edit_menu_->clear();
+    menus_.edit_->clear();
     std::list<QObject *> actions;
-    std::ranges::transform(actions_draw_, std::back_inserter(actions), [](auto &it){ return it.second; });
-    actions.push_back(edit_mode_);
-    std::ranges::transform(actions_edit_menu_, std::back_inserter(actions), [](auto &it){ return it; });
+    std::ranges::transform(actions_.draw_, std::back_inserter(actions), [](auto &it){ return it.second; });
+    actions.push_back(actions_.edit_mode_);
+    std::ranges::transform(actions_.edit_menu_, std::back_inserter(actions), [](auto &it){ return it; });
 
-    utils::addActions(this->edit_menu_, actions);
+    utils::addActions(menus_.edit_, actions);
 }
 
 QString MainWindow::get_window_title(bool dirty) {
-    QString window_title = tr("tl assistant");
-    if (!image_path_.isEmpty()) {
-        window_title = QString("%1 - %2").arg(window_title, image_path_);
-        if (docks_files_list_->count() && docks_files_list_->currentItem())
-            window_title = QString(
-                "%1 "   // window_title
-                "[%2"   // {self.fileListWidget.currentRow() + 1}
-                "/%3]"  // {self.fileListWidget.count()}
-            ).arg(window_title).arg(docks_files_list_->currentRow() + 1).arg(docks_files_list_->count());
-    }
-    if (!this->image_.isNull()) {
-        window_title = QString("%1 | %2x%3").arg(window_title).arg(image_.width()).arg(image_.height());
-    }
-    if (dirty) {
-        window_title = window_title + "*";
-    }
-    return window_title;
+    const auto *file_list = docks_.file_list_;
+    const auto file_index = file_list->currentItem() ? file_list->currentRow() : -1;
+    return format_window_title(
+        image_path_,
+        file_index,
+        file_list->count(),
+        image_,
+        dirty
+    );
 }
 
-void MainWindow::setDirty() {
-    // Even if we autosave the file, we keep the ability to undo
-    this->undo_->setEnabled(this->canvas_->isShapeRestorable());
+void MainWindow::mark_dirty() {
+    // Autosave does not clear the undo stack; keep the undo action available.
+    actions_.undo_->setEnabled(canvas_widgets_.canvas_->can_restore_shape());
 
-    if (config_["auto_save"].as<bool>() || save_auto_->isChecked()) {
+    if (config_["auto_save"].as<bool>() || actions_.save_auto_->isChecked()) {
         std::filesystem::path file_path(image_path_.toStdString());
         auto label_file = QString::fromStdString(file_path.replace_extension("json").string());
         if (!output_dir_.isEmpty()) {
@@ -989,53 +998,47 @@ void MainWindow::setDirty() {
         return;
     }
     this->is_changed_ = true;
-    this->save_->setEnabled(true);
+    actions_.save_->setEnabled(true);
     this->setWindowTitle(get_window_title(true));
 }
 
-void MainWindow::setClean() {
+void MainWindow::mark_clean() {
     this->is_changed_ = false;
-    this->save_->setEnabled(false);
-    for (const auto &action : this->actions_draw_ | std::views::values) {
+    actions_.save_->setEnabled(false);
+    for (const auto &action : this->actions_.draw_ | std::views::values) {
         action->setEnabled(true);
     }
     this->setWindowTitle(get_window_title(false));
 
-    if (this->hasLabelFile()) {
-        this->delete_file_->setEnabled(true);
+    if (this->has_label_file()) {
+        actions_.delete_file_->setEnabled(true);
     } else {
-        this->delete_file_->setEnabled(false);
+        actions_.delete_file_->setEnabled(false);
     }
 }
 
-void MainWindow::toggleActions(bool value) {
-    // Enable/Disable widgets which depend on an opened image.
-    zoom_widget_->setEnabled(value);
-    for (auto &z : actions_zoom_) {
+void MainWindow::update_action_states(bool value) {
+    canvas_widgets_.zoom_widget_->setEnabled(value);
+    for (auto &z : actions_.zoom_) {
         z->setEnabled(value);
     }
-    for (auto &action : actions_on_load_active_) {
+    for (auto &action : actions_.on_load_active_) {
         action->setEnabled(value);
     }
 }
-
-//void MainWindow::queueEvent(function) {
-//    QtCore.QTimer.singleShot(0, function)
-//}
 
 void MainWindow::show_status_message(const QString &message, int32_t delay) {
     this->statusBar()->showMessage(message, delay);
 }
 
 void MainWindow::submit_ai_prompt() {
-    auto create_mode = canvas_->createMode();
-    QString shape_type;  //: Literal["rectangle", "polygon", "mask"]
-    if (AI_CREATE_MODES.contains(create_mode)) {
-        shape_type = ai_assist_annotation_widget_->output_format();
-    } else if (TextToAnnotationCreateMode.contains(create_mode)) {
-        shape_type = create_mode;
-    } else {
-        SPDLOG_WARN("Unsupported createMode={}", create_mode);
+    const auto create_mode = canvas_widgets_.canvas_->createMode();
+    const auto shape_type = resolve_text_annotation_shape_type(
+        create_mode,
+        ai_assist_annotation_widget_->output_format()
+    );
+    if (shape_type.isEmpty()) {
+        SPDLOG_WARN("Unsupported create_mode={}", create_mode);
         return;
     }
 
@@ -1109,22 +1112,22 @@ void MainWindow::submit_ai_prompt() {
     QList<TlShape> shapes = bbox_from_text::get_shapes_from_texts(text_osam_session_.get(), image, image_id, texts);
     this->slotTaskFinish();
 
-    this->canvas_->storeShapes();
+    canvas_widgets_.canvas_->storeShapes();
     this->load_shapes(shapes, false);
-    this->setDirty();
+    this->mark_dirty();
 }
 
-void MainWindow::resetState() {
-    this->shape_list_->clear();
+void MainWindow::reset_state() {
+    docks_.shape_list_->clear();
     this->image_path_.clear();
     this->imageData_.clear();
     this->label_file_.reset();
     this->other_data_.clear();
-    this->canvas_->resetState();
+    canvas_widgets_.canvas_->resetState();
 }
 
-QListWidgetItem *MainWindow::currentItem() {
-    const auto items = this->label_list_->selectedItems();
+QListWidgetItem *MainWindow::current_item() {
+    const auto items = docks_.label_list_->selectedItems();
     if (!items.empty()) {
         return items[0];
     }
@@ -1133,11 +1136,11 @@ QListWidgetItem *MainWindow::currentItem() {
 
 // Callbacks
 
-void MainWindow::undoShapeEdit() {
-    this->canvas_->restoreShape();
-    this->shape_list_->clear();
-    this->load_shapes(this->canvas_->shapes_);
-    this->undo_->setEnabled(this->canvas_->isShapeRestorable());
+void MainWindow::undo_shape_edit() {
+    canvas_widgets_.canvas_->restore_last_shape();
+    docks_.shape_list_->clear();
+    this->load_shapes(canvas_widgets_.canvas_->shapes_);
+    actions_.undo_->setEnabled(canvas_widgets_.canvas_->can_restore_shape());
 }
 
 void MainWindow::tutorial() {
@@ -1148,20 +1151,17 @@ void MainWindow::tutorial() {
 void MainWindow::about() {
 }
 
-void MainWindow::toggleDrawingSensitive(bool drawing) {
-    //Toggle drawing sensitive.
-    //
+void MainWindow::on_drawing_polygon_changed(bool drawing) {
     //In the middle of drawing, toggling between modes should be disabled.
-    //
-    this->edit_mode_->setEnabled(!drawing);
-    this->undo_last_point_->setEnabled(drawing);
-    this->undo_->setEnabled(!drawing);
-    this->delete_->setEnabled(!drawing);
+    actions_.edit_mode_->setEnabled(!drawing);
+    actions_.undo_last_point_->setEnabled(drawing);
+    actions_.undo_->setEnabled(!drawing);
+    actions_.delete_->setEnabled(!drawing);
 }
 
-void MainWindow::switch_canvas_mode(bool edit, const QString &createMode) {
-    if (createMode == "ai_points_to_shape") {
-        const auto model_name = canvas_->get_ai_model_name();
+void MainWindow::switch_canvas_mode(bool edit, const QString &create_mode) {
+    if (create_mode == "ai_points_to_shape") {
+        const auto model_name = canvas_widgets_.canvas_->get_ai_model_name();
         if (AI_MODELS_WITHOUT_POINT_SUPPORT.contains(model_name)) {
             QMessageBox::warning(
                 this,
@@ -1175,26 +1175,30 @@ void MainWindow::switch_canvas_mode(bool edit, const QString &createMode) {
             return;
         }
     }
-    this->canvas_->setEditing(edit);
-    if (!createMode.isEmpty()) {
-        this->canvas_->createMode_ = createMode;
+    canvas_widgets_.canvas_->set_editing(edit);
+    if (!create_mode.isEmpty()) {
+        canvas_widgets_.canvas_->create_mode_ = create_mode;
     }
     if (edit) {
-        for (const auto &draw_action : this->actions_draw_ | std::views::values) {
+        for (const auto &draw_action : this->actions_.draw_ | std::views::values) {
             draw_action->setEnabled(true);
         }
     } else {
-        for (auto &[draw_mode, draw_action] : this->actions_draw_) {
-            draw_action->setEnabled(createMode != draw_mode);
+        for (auto &[draw_mode, draw_action] : this->actions_.draw_) {
+            draw_action->setEnabled(create_mode != draw_mode);
         }
     }
-    this->edit_mode_->setEnabled(!edit);
+    // Keep edit_mode disabled while a partial shape is alive so the user
+    // can't abandon it mid-draw.
+    actions_.edit_mode_->setEnabled(
+        !edit && !canvas_widgets_.canvas_->is_drawing()
+    );
     this->ai_text_to_annotation_widget_->setEnabled(
         !edit
-        && AI_CREATE_MODES.contains(createMode)
+        && AI_CREATE_MODES.contains(create_mode)
     );
-    this->ai_assist_annotation_widget_->setEnabled(!edit && AI_CREATE_MODES.contains(createMode));
-    if (createMode == "ai_points_to_shape") {
+    this->ai_assist_annotation_widget_->setEnabled(!edit && AI_CREATE_MODES.contains(create_mode));
+    if (create_mode == "ai_points_to_shape") {
         this->ai_assist_annotation_widget_->set_disabled_models(AI_MODELS_WITHOUT_POINT_SUPPORT);
     } else {
         this->ai_assist_annotation_widget_->set_disabled_models({});
@@ -1202,6 +1206,7 @@ void MainWindow::switch_canvas_mode(bool edit, const QString &createMode) {
 }
 
 void MainWindow::highlight_ai_buttons(bool highlight) {
+    ai_buttons_highlighted_ = highlight;
     const QString HIGHLIGHT_COLOR("#FFFFCC");
     const QString BORDER_COLOR("#E6E6A0");
     const QString bg = highlight ? HIGHLIGHT_COLOR : "transparent";
@@ -1211,7 +1216,7 @@ void MainWindow::highlight_ai_buttons(bool highlight) {
         " background-color: %1; border: 1px solid {border};"
         " }"
     ).arg(bg);
-    for (auto &[mode, action] : actions_draw_) {
+    for (auto &[mode, action] : actions_.draw_) {
         if (AI_CREATE_MODES.contains(mode))
             for (const auto &widget : action->associatedWidgets())
                 if (qobject_cast<QToolButton *>(widget))
@@ -1219,31 +1224,30 @@ void MainWindow::highlight_ai_buttons(bool highlight) {
     }
 }
 
-void MainWindow::popLabelListMenu(const QPoint &point) {
-    // PyQt5 stubs type QMenu.exec() argument too narrowly
-    this->label_menu_->exec(this->shape_list_->mapToGlobal(point));
+void MainWindow::show_label_list_menu(const QPoint &point) {
+    label_list_menu_origin_ = docks_.shape_list_->mapToGlobal(point);
+    try {
+        // PySide6 type QMenu.exec() argument too narrowly
+        menus_.label_list_->exec(label_list_menu_origin_);
+    } catch (...) {}
+    label_list_menu_origin_ = QPoint();
 }
 
-bool MainWindow::validateLabel(const QString &label) {
-    // no validation
-    if (YAML_STR(config_["validate_label"]).empty()) {
+bool MainWindow::validate_label(const QString &label) {
+    const QString policy = YAML_QSTR(config_["validate_label"]);
+    if (policy.isEmpty()) {
         return true;
     }
-
-    for (auto i = 0; i < label_list_->count(); ++i) {
-        // PyQt5 stubs: item() typed as Optional and .data() unrecognized
-        auto label_i = label_list_->item(i)->data(Qt::UserRole);
-        if (YAML_STR(config_["validate_label"]) == "exact") {
-            if (label_i == label) {
-                return true;
-            }
-        }
+    QStringList existing_labels;
+    auto *label_list = docks_.label_list_;
+    for (auto i = 0; i < label_list->count(); ++i) {
+        existing_labels.append(label_list->item(i)->data(Qt::UserRole).toString());
     }
-    return false;
+    return is_valid_label(label, existing_labels, policy);
 }
 
 void MainWindow::edit_label(bool value) {
-    auto items = shape_list_->selectedItems();
+    auto items = docks_.shape_list_->selectedItems();
     if (items.empty()) {
         SPDLOG_WARN("No label is selected, so cannot edit label.");
         return;
@@ -1301,7 +1305,7 @@ void MainWindow::edit_label(bool value) {
         return;
     }
 
-    if (!this->validateLabel(text)) {
+    if (!this->validate_label(text)) {
         this->errorMessage(
             this->tr("Invalid label"),
             this->tr("Invalid label '%1' with validation type '%2'").arg(
@@ -1311,7 +1315,7 @@ void MainWindow::edit_label(bool value) {
         return;
     }
 
-    this->canvas_->storeShapes();
+    canvas_widgets_.canvas_->storeShapes();
     for (const auto &item : items) {
         auto shape = item->shape();
 
@@ -1337,19 +1341,19 @@ void MainWindow::edit_label(bool value) {
             item->setText(QString("%1 (%2)").arg(shape.label_).arg(shape.group_id_));
         }
         item->setShape(shape);  // 由于保存的是对象, 需要更新到回去.
-        canvas_->update_shape_info(shape);
-        this->setDirty();
-        if (this->label_list_->find_label_item(shape.label_) == nullptr)
-            this->label_list_->add_label_item(
+        canvas_widgets_.canvas_->update_shape_info(shape);
+        this->mark_dirty();
+        if (docks_.label_list_->find_label_item(shape.label_) == nullptr)
+            docks_.label_list_->add_label_item(
                 shape.label_,
-                get_rgb_by_label(shape.label_, label_list_)
+                get_rgb_by_label(shape.label_, docks_.label_list_)
             );
     }
 }
 
-void MainWindow::fileSearchChanged() {
+void MainWindow::on_file_search_changed() {
     import_images_from_dir(
-        prev_opened_dir_, files_search_->text()
+        prev_opened_dir_, docks_.file_search_->text()
     );
 }
 
@@ -1357,7 +1361,7 @@ void MainWindow::file_list_item_selection_changed() {
     if (!can_continue()) {
         return;
     }
-    const auto items = docks_files_list_->selectedItems();
+    const auto items = docks_.file_list_->selectedItems();
     if (items.empty()) {
         return;
     }
@@ -1366,28 +1370,28 @@ void MainWindow::file_list_item_selection_changed() {
 
 // React to canvas signals.
 void MainWindow::shapeSelectionChanged(const QList<int32_t> &selected_shapes) {
-    QObject::disconnect(shape_list_, &ShapeListView::itemSelectionChanged, this,
+    QObject::disconnect(docks_.shape_list_, &ShapeListView::itemSelectionChanged, this,
         &MainWindow::label_selection_changed
     );
-    for (auto &shape : canvas_->selectedShapes_) {
-        canvas_->shapes_[shape].selected_ = false;
+    for (auto &shape : canvas_widgets_.canvas_->selectedShapes_) {
+        canvas_widgets_.canvas_->shapes_[shape].selected_ = false;
     }
-    shape_list_->clearSelection();
-    canvas_->selectedShapes_ = selected_shapes;
-    for (auto &idx : canvas_->selectedShapes_) {
-        canvas_->shapes_[idx].selected_ = true;
-        const auto item = shape_list_->findItemByShape(canvas_->shapes_[idx]);
-        shape_list_->selectItem(item);
-        shape_list_->scrollToItem(item);
+    docks_.shape_list_->clearSelection();
+    canvas_widgets_.canvas_->selectedShapes_ = selected_shapes;
+    for (auto &idx : canvas_widgets_.canvas_->selectedShapes_) {
+        canvas_widgets_.canvas_->shapes_[idx].selected_ = true;
+        const auto item = docks_.shape_list_->findItemByShape(canvas_widgets_.canvas_->shapes_[idx]);
+        docks_.shape_list_->selectItem(item);
+        docks_.shape_list_->scrollToItem(item);
     }
-    QObject::connect(shape_list_, &ShapeListView::itemSelectionChanged, this,
+    QObject::connect(docks_.shape_list_, &ShapeListView::itemSelectionChanged, this,
         &MainWindow::label_selection_changed
     );
     const auto n_selected = selected_shapes.size() > 0;
-    delete_->setEnabled(n_selected);
-    duplicate_->setEnabled(n_selected);
-    copy_->setEnabled(n_selected);
-    edit_->setEnabled(n_selected);
+    actions_.delete_->setEnabled(n_selected);
+    actions_.duplicate_->setEnabled(n_selected);
+    actions_.copy_->setEnabled(n_selected);
+    actions_.edit_->setEnabled(n_selected);
 }
 
 void MainWindow::addLabel(TlShape &shape) {
@@ -1398,15 +1402,15 @@ void MainWindow::addLabel(TlShape &shape) {
         text = QString("%1 (%2)").arg(shape.label_).arg(shape.group_id_);
     }
     auto *const shape_list_item = new ShapeListItem(text);
-    shape_list_->addItem(shape_list_item);
-    if (label_list_->find_label_item(shape.label_) == nullptr) {
-        this->label_list_->add_label_item(
+    docks_.shape_list_->addItem(shape_list_item);
+    if (docks_.label_list_->find_label_item(shape.label_) == nullptr) {
+        docks_.label_list_->add_label_item(
             shape.label_,
-            get_rgb_by_label(shape.label_, label_list_)
+            get_rgb_by_label(shape.label_, docks_.label_list_)
         );
     }
     label_dialog_->addLabelHistory(shape.label_);
-    for (const auto &action : actions_on_shapes_present_) {
+    for (const auto &action : actions_.on_shapes_present_) {
         action->setEnabled(true);
     }
 
@@ -1423,7 +1427,7 @@ void MainWindow::addLabel(TlShape &shape) {
 void MainWindow::update_shape_color(TlShape &shape) {
     //assert shape.label is not None
     const auto v = get_rgb_by_label(
-        shape.label_, label_list_
+        shape.label_, docks_.label_list_
     );
     shape.line_color_ = QColor(v[0], v[1], v[2]);
     shape.vertex_fill_color_ = QColor(v[0], v[1], v[2]);
@@ -1469,22 +1473,22 @@ std::vector<int32_t> MainWindow::get_rgb_by_label(const QString &label, LabelLis
 }
 
 void MainWindow::remLabels(const QList<TlShape> &shapes) {
-    QObject::disconnect(shape_list_, &ShapeListView::itemDropped, this, &MainWindow::labelOrderChanged);
+    QObject::disconnect(docks_.shape_list_, &ShapeListView::itemDropped, this, &MainWindow::labelOrderChanged);
     for (const auto &shape : shapes) {
-        auto *item = shape_list_->findItemByShape(shape);
-        shape_list_->removeItem(item);
+        auto *item = docks_.shape_list_->findItemByShape(shape);
+        docks_.shape_list_->removeItem(item);
     }
-    QObject::connect(shape_list_, &ShapeListView::itemDropped, this, &MainWindow::labelOrderChanged);
+    QObject::connect(docks_.shape_list_, &ShapeListView::itemDropped, this, &MainWindow::labelOrderChanged);
 }
 
 void MainWindow::load_shapes(QList<TlShape> &shapes, bool replace) {
-    QObject::disconnect(shape_list_, &ShapeListView::itemSelectionChanged, this, &MainWindow::label_selection_changed);
+    QObject::disconnect(docks_.shape_list_, &ShapeListView::itemSelectionChanged, this, &MainWindow::label_selection_changed);
     for (auto &shape : shapes) {
         addLabel(shape);
     }
-    shape_list_->clearSelection();
-    QObject::connect(shape_list_, &ShapeListView::itemSelectionChanged, this, &MainWindow::label_selection_changed);
-    canvas_->loadShapes(shapes, replace);
+    docks_.shape_list_->clearSelection();
+    QObject::connect(docks_.shape_list_, &ShapeListView::itemSelectionChanged, this, &MainWindow::label_selection_changed);
+    canvas_widgets_.canvas_->loadShapes(shapes, replace);
 }
 
 void MainWindow::load_shape_dicts(const QList<ShapeDict> &shape_dicts) {
@@ -1558,8 +1562,8 @@ bool MainWindow::saveLabels(const QString &filename) {
 
     //shapes = [format_shape(item.shape()) for item in this->labelList];
     QMap<QString, bool> flags = {};
-    for (auto i = 0; i < this->flags_list_->count(); ++i) {
-        const auto *item = this->flags_list_->item(i);
+    for (auto i = 0; i < docks_.flag_list_->count(); ++i) {
+        const auto *item = docks_.flag_list_->item(i);
         const auto key = item->text();
         const auto flag = item->checkState() == Qt::Checked;
         flags[key] = flag;
@@ -1573,7 +1577,7 @@ bool MainWindow::saveLabels(const QString &filename) {
         }
         lf->save(
             filename,
-            canvas_->shapes_,
+            canvas_widgets_.canvas_->shapes_,
             imagePath,
             imageData,
             image_.height(),
@@ -1582,7 +1586,7 @@ bool MainWindow::saveLabels(const QString &filename) {
             flags
         );
         label_file_ = std::move(lf);
-        auto items = docks_files_list_->findItems(image_path_, Qt::MatchExactly);
+        auto items = docks_.file_list_->findItems(image_path_, Qt::MatchExactly);
         if (items.count() > 0) {
             if (items.count() != 1)
                 throw std::runtime_error("There are duplicate files.");
@@ -1607,44 +1611,44 @@ void MainWindow::pasteSelectedShape() {
     QList<TlShape> copied_shapes;
     std::ranges::for_each(copied_shapes_, [&copied_shapes](auto &s){ copied_shapes.push_back(s.clone()); });
     this->load_shapes(copied_shapes, false);
-    this->canvas_->selectShapes(copied_shapes);
-    setDirty();
+    canvas_widgets_.canvas_->selectShapes(copied_shapes);
+    mark_dirty();
 }
 
 void MainWindow::copySelectedShape() {
     copied_shapes_.clear();
-    std::ranges::for_each(this->canvas_->selectedShapes_, [&](auto &s){
-        copied_shapes_.push_back(canvas_->shapes_[s]);}
+    std::ranges::for_each(canvas_widgets_.canvas_->selectedShapes_, [&](auto &s){
+        copied_shapes_.push_back(canvas_widgets_.canvas_->shapes_[s]);}
     );
-    paste_->setEnabled(copied_shapes_.size() > 0);
+    actions_.paste_->setEnabled(copied_shapes_.size() > 0);
 }
 
 void MainWindow::label_selection_changed() {
     QList<TlShape> selected_shapes = {};
-    for (const auto &item : shape_list_->selectedItems()) {
+    for (const auto &item : docks_.shape_list_->selectedItems()) {
         selected_shapes.append(item->shape());
     }
     if (!selected_shapes.empty()) {
-        canvas_->selectShapes(selected_shapes);
+        canvas_widgets_.canvas_->selectShapes(selected_shapes);
     } else {
-        if (canvas_->deSelectShape()) {
-            canvas_->update();
+        if (canvas_widgets_.canvas_->deSelectShape()) {
+            canvas_widgets_.canvas_->update();
         }
     }
 }
 
 void MainWindow::labelItemChanged(const ShapeListItem *item) {
     const auto shape = item->shape();
-    canvas_->setShapeVisible(shape, item->checkState() == Qt::Checked);
+    canvas_widgets_.canvas_->setShapeVisible(shape, item->checkState() == Qt::Checked);
 }
 
 void MainWindow::labelOrderChanged() {
-    setDirty();
+    mark_dirty();
     // 不能且不需要重新加载, shape_list中保存的原始图形, 不包含锚点调整信息。
     //QList<TlShape> shapes;
     //QList<ShapeListItem *> items = shape_list_->items();
     //std::ranges::transform(items, std::back_inserter(shapes), [](auto &item){ return item->shape(); });
-    //this->canvas_->loadShapes(shapes);
+    //canvas_widgets_.canvas_->loadShapes(shapes);
 }
 
 // Callback functions:
@@ -1654,7 +1658,7 @@ void MainWindow::newShape() {
     //
     //position MUST be in global coordinates.
     //
-    auto items = label_list_->selectedItems();
+    auto items = docks_.label_list_->selectedItems();
     QString text;
     if (!items.isEmpty()) {
         text = items[0]->data(Qt::UserRole).toString();
@@ -1670,7 +1674,7 @@ void MainWindow::newShape() {
         }
     }
 
-    if (!text.isEmpty() && !validateLabel(text)) {
+    if (!text.isEmpty() && !validate_label(text)) {
         errorMessage(
             tr("Invalid label"),
             tr("Invalid label '%1' with validation type '%2'").arg(
@@ -1680,33 +1684,33 @@ void MainWindow::newShape() {
         text = "";
     }
     if (!text.isEmpty()) {
-        label_list_->clearSelection();
+        docks_.label_list_->clearSelection();
         //assert isinstance(flags, dict)
-        auto shapes = canvas_->setLastLabel(text, group_id, description, flags);    // 在Canvas上更新.
+        auto shapes = canvas_widgets_.canvas_->setLastLabel(text, group_id, description, flags);    // 在Canvas上更新.
         for (auto shape : shapes) {
             shape.group_id_ = group_id;
             shape.description_ = description;
             addLabel(shape);
         }
-        edit_mode_->setEnabled(true);
-        undo_last_point_->setEnabled(false);
-        undo_->setEnabled(true);
-        setDirty();
+        actions_.edit_mode_->setEnabled(true);
+        actions_.undo_last_point_->setEnabled(false);
+        actions_.undo_->setEnabled(true);
+        mark_dirty();
     } else {
-        canvas_->undoLastLine();
-        canvas_->shapesBackups_.pop_back();
+        canvas_widgets_.canvas_->undoLastLine();
+        canvas_widgets_.canvas_->shapesBackups_.pop_back();
     }
 }
 
 void MainWindow::scrollRequest(int32_t delta, Qt::Orientation orientation) {
     const auto units = -delta * 0.1;  // natural scroll
-    const auto *bar = scroll_bars_[orientation];
+    const auto *bar = canvas_widgets_.scroll_bars_[orientation];
     const auto value = bar->value() + bar->singleStep() * units;
     setScroll(orientation, value);
 }
 
 void MainWindow::setScroll(Qt::Orientation orientation, float value) {
-    scroll_bars_[orientation]->setValue(value);
+    canvas_widgets_.scroll_bars_[orientation]->setValue(value);
     scroll_values_[orientation][image_path_] = value;
 }
 
@@ -1717,18 +1721,18 @@ void MainWindow::set_zoom(int32_t value, QPointF pos) {
     }
 
     if (pos.isNull())
-        pos = QPointF(this->canvas_->visibleRegion().boundingRect().center());
-    int32_t canvas_width_old = this->canvas_->width();
+        pos = QPointF(canvas_widgets_.canvas_->visibleRegion().boundingRect().center());
+    int32_t canvas_width_old = canvas_widgets_.canvas_->width();
 
-    this->fit_width_->setChecked(zoom_mode_ == ZoomMode::FIT_WIDTH);
-    this->fit_window_->setChecked(zoom_mode_ == ZoomMode::FIT_WINDOW);
-    this->canvas_->enableDragging(
+    actions_.fit_width_->setChecked(zoom_mode_ == ZoomMode::FIT_WIDTH);
+    actions_.fit_window_->setChecked(zoom_mode_ == ZoomMode::FIT_WINDOW);
+    canvas_widgets_.canvas_->enableDragging(
         value > scalers_[ZoomMode::FIT_WINDOW]() * 100
     );
-    this->zoom_widget_->setValue(value);  // triggers self._paint_canvas
+    canvas_widgets_.zoom_widget_->setValue(value);  // triggers self._paint_canvas
     this->zoom_values_[image_path_] = {this->zoom_mode_, value};
 
-    int32_t canvas_width_new = this->canvas_->width();
+    int32_t canvas_width_new = canvas_widgets_.canvas_->width();
     if (canvas_width_old == canvas_width_new) {
         return;
     }
@@ -1737,11 +1741,11 @@ void MainWindow::set_zoom(int32_t value, QPointF pos) {
     float y_shift = pos.y() * canvas_scale_factor - pos.y();
     setScroll(
         Qt::Horizontal,
-        this->scroll_bars_[Qt::Horizontal]->value() + x_shift
+        canvas_widgets_.scroll_bars_[Qt::Horizontal]->value() + x_shift
     );
     setScroll(
         Qt::Vertical,
-        this->scroll_bars_[Qt::Vertical]->value() + y_shift
+        canvas_widgets_.scroll_bars_[Qt::Vertical]->value() + y_shift
     );
 }
 
@@ -1753,9 +1757,9 @@ void MainWindow::set_zoom_to_original() {
 void MainWindow::add_zoom(float increment, QPointF pos) {
     int32_t zoom_value;
     if (increment > 1) {
-        zoom_value = std::ceil(zoom_widget_->value() * increment);
+        zoom_value = std::ceil(canvas_widgets_.zoom_widget_->value() * increment);
     } else {
-        zoom_value = std::floor(zoom_widget_->value() * increment);
+        zoom_value = std::floor(canvas_widgets_.zoom_widget_->value() * increment);
     }
     zoom_mode_ = ZoomMode::MANUAL_ZOOM;
     set_zoom(zoom_value, pos);
@@ -1767,7 +1771,7 @@ void MainWindow::zoom_requested(int32_t delta, QPointF pos) {
 
 void MainWindow::setFitWindow(bool value) {
     if (value) {
-        fit_width_->setChecked(false);
+        actions_.fit_width_->setChecked(false);
     }
     zoom_mode_ = value ? ZoomMode::FIT_WINDOW : ZoomMode::MANUAL_ZOOM;
     adjust_scale();
@@ -1775,7 +1779,7 @@ void MainWindow::setFitWindow(bool value) {
 
 void MainWindow::setFitWidth(bool value) {
     if (value) {
-        fit_window_->setChecked(false);
+        actions_.fit_window_->setChecked(false);
     }
     zoom_mode_ = value ? ZoomMode::FIT_WIDTH : ZoomMode::MANUAL_ZOOM;
     adjust_scale();
@@ -1783,12 +1787,12 @@ void MainWindow::setFitWidth(bool value) {
 
 void MainWindow::enableKeepPrevScale(bool enabled) {
     config_["keep_prev_scale"] = enabled;
-    keep_prev_scale_->setChecked(enabled);
+    actions_.keep_prev_zoom_->setChecked(enabled);
 }
 
 void MainWindow::onNewBrightnessContrast(const QImage &image) {
     // QPixmap::fromImage: 深拷贝, 原始QImage的数据会被复制到新的QPixmap中.
-    canvas_->loadPixmap(QPixmap::fromImage(image), image_path_, false);
+    canvas_widgets_.canvas_->loadPixmap(QPixmap::fromImage(image), image_path_, false);
 }
 
 void MainWindow::brightnessContrast(bool value, bool is_initial_load) {
@@ -1846,7 +1850,7 @@ void MainWindow::brightnessContrast(bool value, bool is_initial_load) {
 }
 
 void MainWindow::toggleShapes(int32_t value) {
-    for (auto *item : shape_list_->items()) {
+    for (auto *item : docks_.shape_list_->items()) {
         auto target = (value == None) ? item->checkState() == Qt::Unchecked : value;
         item->setCheckState(target ? Qt::Checked : Qt::Unchecked); // emit itemChanged
     }
@@ -1863,12 +1867,12 @@ QString MainWindow::get_label_path(QString image_or_label_path) {
 void MainWindow::load_file(QString image_or_label_path) {
     // changing fileListWidget loads file
     if (imageList().contains(image_or_label_path) &&
-        docks_files_list_->currentRow() != imageList().indexOf(image_or_label_path)
+        docks_.file_list_->currentRow() != imageList().indexOf(image_or_label_path)
     ) {
-        this->docks_files_list_->setCurrentRow(
+        docks_.file_list_->setCurrentRow(
             imageList().indexOf(image_or_label_path)
         );
-        this->docks_files_list_->repaint();
+        docks_.file_list_->repaint();
         return;
     }
 
@@ -1881,11 +1885,11 @@ void MainWindow::load_file(QString image_or_label_path) {
     //)
     QList<TlShape> prev_shapes = (
         config_["keep_prev"].as<bool>() || QApplication::keyboardModifiers() == (Qt::ControlModifier | Qt::ShiftModifier)
-        ? canvas_->shapes_ : QList<TlShape>()
+        ? canvas_widgets_.canvas_->shapes_ : QList<TlShape>()
     );
     this->prev_image_path_ = this->image_path_;
-    this->resetState();
-    this->canvas_->setEnabled(false);
+    this->reset_state();
+    canvas_widgets_.canvas_->setEnabled(false);
     if (!QFile::exists(image_or_label_path)) {
         this->errorMessage(
             tr("Error opening file"),
@@ -1960,7 +1964,7 @@ void MainWindow::load_file(QString image_or_label_path) {
     }
     this->image_ = image;
     t0 = std::chrono::system_clock::now();
-    canvas_->loadPixmap(QPixmap::fromImage(image), this->image_path_);
+    canvas_widgets_.canvas_->loadPixmap(QPixmap::fromImage(image), this->image_path_);
     SPDLOG_INFO("Loaded pixmap in {}ms", std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - t0).count());
     YAML::Node flags; //flags = {k: False for k in config_["flags"] or []}
     if (this->label_file_) {
@@ -1969,14 +1973,14 @@ void MainWindow::load_file(QString image_or_label_path) {
         //    flags.update(this->labelFile.flags);
         //}
     }
-    this->load_flags(flags, flags_list_);
-    if (config_["keep_prev"].as<bool>() && this->noShapes()) {
+    this->load_flags(flags, docks_.flag_list_);
+    if (config_["keep_prev"].as<bool>() && this->has_no_shapes()) {
         this->load_shapes(prev_shapes, false);
-        this->setDirty();
+        this->mark_dirty();
     } else {
-        this->setClean();
+        this->mark_clean();
     }
-    canvas_->setEnabled(true);
+    canvas_widgets_.canvas_->setEnabled(true);
     // set zoom values
     bool is_initial_load = !zoom_values_.empty();
     if (zoom_values_.contains(image_path_)) {
@@ -1995,8 +1999,8 @@ void MainWindow::load_file(QString image_or_label_path) {
     }
     this->brightnessContrast(false, true);
     this->paint_canvas();
-    this->toggleActions(true);
-    this->canvas_->setFocus();
+    this->update_action_states(true);
+    canvas_widgets_.canvas_->setFocus();
     show_status_message(
         tr("Loaded %1").arg(QFileInfo(image_or_label_path).baseName())
     );
@@ -2009,7 +2013,7 @@ void MainWindow::load_file(QString image_or_label_path) {
 
 void MainWindow::resizeEvent(QResizeEvent *event) {
     if (
-        canvas_ &&
+        canvas_widgets_.canvas_ &&
         !image_.isNull() &&
         zoom_mode_ != ZoomMode::MANUAL_ZOOM) {
         adjust_scale();
@@ -2022,9 +2026,9 @@ void MainWindow::paint_canvas() {
         SPDLOG_WARN("image is null, cannot paint canvas");
         return;
     }
-    canvas_->scale_ = 0.01 * zoom_widget_->value();
-    canvas_->adjustSize();
-    canvas_->update();
+    canvas_widgets_.canvas_->scale_ = 0.01 * canvas_widgets_.zoom_widget_->value();
+    canvas_widgets_.canvas_->adjustSize();
+    canvas_widgets_.canvas_->update();
 }
 
 void MainWindow::adjust_scale() {
@@ -2036,8 +2040,8 @@ float MainWindow::scaleFitWindow() const {
     const auto viewport_w = this->centralWidget()->width() - EPSILON_TO_HIDE_SCROLLBAR;
     const auto viewport_h = this->centralWidget()->height() - EPSILON_TO_HIDE_SCROLLBAR;
 
-    const auto pixmap_w = this->canvas_->pixmap_.width() * 1.;
-    const auto pixmap_h = this->canvas_->pixmap_.height() * 1.;
+    const auto pixmap_w = canvas_widgets_.canvas_->pixmap_.width() * 1.;
+    const auto pixmap_h = canvas_widgets_.canvas_->pixmap_.height() * 1.;
 
     const auto scale_by_width = viewport_w / pixmap_w;
     const auto scale_by_height = viewport_h / pixmap_h;
@@ -2047,16 +2051,16 @@ float MainWindow::scaleFitWindow() const {
 float MainWindow::scaleFitWidth() const {
     float EPSILON_TO_HIDE_SCROLLBAR = 15.0;
     auto w = this->centralWidget()->width() - EPSILON_TO_HIDE_SCROLLBAR;
-    return w / this->canvas_->pixmap_.width();
+    return w / canvas_widgets_.canvas_->pixmap_.width();
 }
 
 void MainWindow::enableSaveImageWithData(bool enabled) {
     config_["with_image_data"] = enabled;
-    save_with_image_data_->setChecked(enabled);
+    actions_.save_with_image_data_->setChecked(enabled);
 }
 
 void MainWindow::reset_layout() {
-    settings_.remove("window/state");
+    window_state_.remove("window/state");
     restoreState(default_state_);
 }
 
@@ -2064,9 +2068,9 @@ void MainWindow::closeEvent(QCloseEvent *event) {
     if (!can_continue()) {
         event->ignore();
     }
-    settings_.setValue("window/size", this->size());
-    settings_.setValue("window/position", this->pos());
-    settings_.setValue("window/state", this->saveState());
+    window_state_.setValue("window/size", this->size());
+    window_state_.setValue("window/position", this->pos());
+    window_state_.setValue("window/state", this->saveState());
 }
 
 void MainWindow::dragEnterEvent(QDragEnterEvent *event) {
@@ -2104,25 +2108,25 @@ void MainWindow::dropEvent(QDropEvent *event) {
 // User Dialogs #
 
 void MainWindow::open_prev_image(bool value) {
-    int32_t row_prev = docks_files_list_->currentRow() - 1;
+    int32_t row_prev = docks_.file_list_->currentRow() - 1;
     if (row_prev < 0) {
         SPDLOG_INFO("there is no prev image");
         return;
     }
     SPDLOG_INFO("setting current row to {}", row_prev);
-    docks_files_list_->setCurrentRow(row_prev);
-    docks_files_list_->repaint();
+    docks_.file_list_->setCurrentRow(row_prev);
+    docks_.file_list_->repaint();
 }
 
 void MainWindow::open_next_image(bool value) {
-    int32_t row_next = docks_files_list_->currentRow() + 1;
-    if (row_next >= docks_files_list_->count()) {
+    int32_t row_next = docks_.file_list_->currentRow() + 1;
+    if (row_next >= docks_.file_list_->count()) {
         SPDLOG_INFO("there is no next image");
         return;
     }
     SPDLOG_INFO("setting current row to {}", row_next);
-    docks_files_list_->setCurrentRow(row_next);
-    docks_files_list_->repaint();
+    docks_.file_list_->setCurrentRow(row_next);
+    docks_.file_list_->repaint();
 }
 
 void MainWindow::open_file_with_dialog(bool value) {
@@ -2189,10 +2193,10 @@ void MainWindow::changeOutputDirDialog(bool _value) {
     const auto imagelist = imageList();
     if (imagelist.contains(current_image_path)) {
         // retain currently selected file
-        docks_files_list_->setCurrentRow(
+        docks_.file_list_->setCurrentRow(
             imagelist.indexOf(current_image_path)
         );
-        docks_files_list_->repaint();
+        docks_.file_list_->repaint();
     }
 }
 
@@ -2210,7 +2214,7 @@ void MainWindow::save_label_file(bool save_as) {
         return;
     }
     if (saveLabels(label_path)) {
-        setClean();
+        mark_clean();
     }
 }
 
@@ -2241,12 +2245,12 @@ void MainWindow::closeFile(bool value) {
     if (!can_continue()) {
         return;
     }
-    this->resetState();
-    this->setClean();
-    this->toggleActions(false);
-    this->canvas_->setEnabled(false);
-    this->docks_files_list_->setFocus();
-    this->save_as_->setEnabled(false);
+    this->reset_state();
+    this->mark_clean();
+    this->update_action_states(false);
+    canvas_widgets_.canvas_->setEnabled(false);
+    docks_.file_list_->setFocus();
+    actions_.save_as_->setEnabled(false);
 }
 
 QString MainWindow::getLabelFile() {
@@ -2276,18 +2280,30 @@ void MainWindow::deleteFile() {
     QFile::remove(annotation_path);
     SPDLOG_INFO("Label file is removed: {}", annotation_path);
 
-    auto *const item = docks_files_list_->currentItem();
+    auto *const item = docks_.file_list_->currentItem();
     if (item) {
         item->setCheckState(Qt::Unchecked);
     }
 
     // 修改: 删除标签文件后保持当前打开图像.
     //resetState();
-    this->shape_list_->clear();
+    docks_.shape_list_->clear();
     this->label_file_.reset();
     this->other_data_.clear();
-    this->canvas_->resetState();
-    this->canvas_->loadPixmap(QPixmap::fromImage(this->image_), this->image_path_);
+    canvas_widgets_.canvas_->resetState();
+    canvas_widgets_.canvas_->loadPixmap(QPixmap::fromImage(this->image_), this->image_path_);
+}
+
+LabelDialog *MainWindow::make_label_dialog() {
+    return new LabelDialog(
+        this,
+        YAML_VSTR(config_["labels"]),
+        config_["sort_labels"].as<bool>(),
+        config_["show_label_text_field"].as<bool>(),
+        YAML_QSTR(config_["label_completion"]),
+        YAML_QMAP(config_["fit_to_content"]),
+        YAML_QMAP(config_["label_flags"])
+    );
 }
 
 void MainWindow::open_config_file() {
@@ -2316,7 +2332,7 @@ void MainWindow::open_config_file() {
 
 // Message Dialogs. #
 bool MainWindow::hasLabels() {
-    if (noShapes()) {
+    if (has_no_shapes()) {
         this->errorMessage(
             "No objects labeled",
             "You must label at least one object to save the file."
@@ -2326,7 +2342,7 @@ bool MainWindow::hasLabels() {
     return true;
 }
 
-bool MainWindow::hasLabelFile() {
+bool MainWindow::has_label_file() {
     if (image_path_.isEmpty()) {
         return false;
     }
@@ -2373,53 +2389,53 @@ void MainWindow::toggleKeepPrevMode() {
 }
 
 void MainWindow::removeSelectedPoint() {
-    canvas_->removeSelectedPoint();
-    canvas_->update();
+    canvas_widgets_.canvas_->removeSelectedPoint();
+    canvas_widgets_.canvas_->update();
     if (
-        canvas_->hShape_ != None &&
-        canvas_->shapes_[canvas_->hShape_].points_.empty())
+        canvas_widgets_.canvas_->hShape_ != None &&
+        canvas_widgets_.canvas_->shapes_[canvas_widgets_.canvas_->hShape_].points_.empty())
     {
-        canvas_->deleteShape(canvas_->shapes_[canvas_->hShape_]);
-        remLabels({ canvas_->shapes_[canvas_->hShape_] });
-        if (noShapes()) {
-            for (const auto &action : actions_on_shapes_present_) {
+        canvas_widgets_.canvas_->deleteShape(canvas_widgets_.canvas_->shapes_[canvas_widgets_.canvas_->hShape_]);
+        remLabels({ canvas_widgets_.canvas_->shapes_[canvas_widgets_.canvas_->hShape_] });
+        if (has_no_shapes()) {
+            for (const auto &action : actions_.on_shapes_present_) {
                 action->setEnabled(false);
             }
         }
     }
-    setDirty();
+    mark_dirty();
 }
 
 void MainWindow::deleteSelectedShape() {
     const auto yes = QMessageBox::Yes, no = QMessageBox::No;
     const auto msg = tr(
         "You are about to permanently delete %1 shapes, proceed anyway?"
-    ).arg(canvas_->selectedShapes_.length());
+    ).arg(canvas_widgets_.canvas_->selectedShapes_.length());
     if (yes == QMessageBox::warning(
         this, tr("Attention"), msg, yes | no, yes
     )) {
-        remLabels(canvas_->deleteSelected());
-        setDirty();
-        if (noShapes()) {
-            for (auto *action : actions_on_shapes_present_) {
+        remLabels(canvas_widgets_.canvas_->deleteSelected());
+        mark_dirty();
+        if (has_no_shapes()) {
+            for (auto *action : actions_.on_shapes_present_) {
                 action->setEnabled(false);
             }
         }
     }
 }
 
-void MainWindow::copyShape() {
-    canvas_->endMove(true);
-    for (auto &&shape : canvas_->selectedShapes_ | std::views::transform([this](int32_t i) { return canvas_->shapes_[i]; })) {
+void MainWindow::copy_shape() {
+    canvas_widgets_.canvas_->end_move(true);
+    for (auto &&shape : canvas_widgets_.canvas_->selectedShapes_ | std::views::transform([this](int32_t i) { return canvas_widgets_.canvas_->shapes_[i]; })) {
         addLabel(shape);
     }
-    label_list_->clearSelection();
-    setDirty();
+    docks_.label_list_->clearSelection();
+    mark_dirty();
 }
 
-void MainWindow::moveShape() {
-    canvas_->endMove(false);
-    setDirty();
+void MainWindow::move_shape() {
+    canvas_widgets_.canvas_->end_move(false);
+    mark_dirty();
 }
 
 void MainWindow::load_from_file_or_dir(const QString &file_or_dir) {
@@ -2427,21 +2443,21 @@ void MainWindow::load_from_file_or_dir(const QString &file_or_dir) {
         throw std::invalid_argument("file_or_dir cannot be empty");
 
     if (LabelFile::is_label_file(file_or_dir)) {
-        docks_files_list_->clear();
-        files_dock_->setEnabled(false);
-        files_dock_->setToolTip(
+        docks_.file_list_->clear();
+        docks_.file_dock_->setEnabled(false);
+        docks_.file_dock_->setToolTip(
             tr("File list is disabled when a label file is opened")
         );
         load_file(file_or_dir);
     } else if (QFileInfo(file_or_dir).isDir()) {
         import_images_from_dir(
-            file_or_dir, files_search_->text()
+            file_or_dir, docks_.file_search_->text()
         );
         open_next_image();
     } else {
         import_images_from_dir(
             QFileInfo(file_or_dir).path(),
-            files_search_->text()
+            docks_.file_search_->text()
         );
         load_file(file_or_dir);
     }
@@ -2476,8 +2492,8 @@ void MainWindow::open_dir_with_dialog(bool value) {
 //@property
 QStringList MainWindow::imageList() {
     QStringList lst;
-    for (auto i = 0; i < docks_files_list_->count(); ++i) {
-        auto *const item = docks_files_list_->item(i);
+    for (auto i = 0; i < docks_.file_list_->count(); ++i) {
+        auto *const item = docks_.file_list_->item(i);
         //assert item
         lst.append(item->text());
     }
@@ -2501,12 +2517,12 @@ void MainWindow::importDroppedImageFiles(const QStringList &imageFiles) {
         } else {
             item->setCheckState(Qt::Unchecked);
         }
-        docks_files_list_->addItem(item);
+        docks_.file_list_->addItem(item);
     }
 
     if (imageList().count() > 1) {
-        open_next_img_->setEnabled(true);
-        open_prev_img_->setEnabled(true);
+        actions_.open_next_img_->setEnabled(true);
+        actions_.open_prev_img_->setEnabled(true);
     }
 
     open_next_image();
@@ -2515,19 +2531,19 @@ void MainWindow::importDroppedImageFiles(const QStringList &imageFiles) {
 void MainWindow::import_images_from_dir(
     const QString &root_dir, const QString &pattern)
 {
-    open_next_img_->setEnabled(true);
-    open_prev_img_->setEnabled(true);
+    actions_.open_next_img_->setEnabled(true);
+    actions_.open_prev_img_->setEnabled(true);
 
     if (!can_continue() || root_dir.isEmpty()) {
         return;
     }
-    files_dock_->setEnabled(true);
-    files_dock_->setToolTip("");
+    docks_.file_dock_->setEnabled(true);
+    docks_.file_dock_->setToolTip("");
 
     AppConfig::instance().last_work_dir_ = root_dir.toStdString();
     prev_opened_dir_ = root_dir;
     image_path_.clear();
-    docks_files_list_->clear();
+    docks_.file_list_->clear();
 
     auto image_paths = scan_image_files(root_dir);
     QRegularExpression re(pattern);
@@ -2551,16 +2567,144 @@ void MainWindow::import_images_from_dir(
         } else {
             item->setCheckState(Qt::Unchecked);
         }
-        docks_files_list_->addItem(item);
+        docks_.file_list_->addItem(item);
     }
 }
 
 void MainWindow::update_status_stats(const QPointF &mouse_pos) {
     QStringList stats;
-    stats.append(QString("mode=%1").arg(ModeName(canvas_->mode_)));
+    stats.append(QString("mode=%1").arg(ModeName(canvas_widgets_.canvas_->mode_)));
     stats.append(QString("x=%1, y=%2").arg(mouse_pos.x(), 0, 'f', 1).arg(mouse_pos.y(), 0, 'f', 1));
-    stats_->setText(stats.join(" | "));
+    status_bar_.stats_->setText(stats.join(" | "));
 }
+
+//QList<TlShape> MainWindow::shapes_from_dicts(
+//    shape_dicts: list[ShapeDict],
+//    label_flags: dict[str, list[str]] | None,
+//) {
+//    shapes: list[Shape] = []
+//    for shape_dict in shape_dicts:
+//        shape = Shape(
+//            label=shape_dict["label"],
+//            shape_type=cast(ShapeType, shape_dict["shape_type"]),
+//            group_id=shape_dict["group_id"],
+//            description=shape_dict["description"],
+//            mask=shape_dict["mask"],
+//            points=np.array(shape_dict["points"], dtype=np.float64),
+//            closed=True,
+//        )
+//
+//        default_flags: dict[str, bool] = {}
+//        if label_flags:
+//            for pattern, keys in label_flags.items():
+//                if not isinstance(shape.label, str):
+//                    logger.warning("shape.label is not str: {}", shape.label)
+//                    continue
+//                if re.match(pattern, shape.label):
+//                    for key in keys:
+//                        default_flags[key] = False
+//        shape.flags = default_flags
+//        shape.flags.update(shape_dict["flags"])
+//        shape.other_data = shape_dict["other_data"]
+//
+//        shapes.append(shape)
+//    return shapes
+//}
+
+QString MainWindow::resolve_text_annotation_shape_type(
+    const QString &create_mode, const QString &ai_output_format
+) {
+    if (AI_CREATE_MODES.contains(create_mode)) {
+        return ai_output_format;
+    } else if (TextToAnnotationCreateMode.contains(create_mode)) {
+        return create_mode;
+    }
+    return "";
+}
+
+//def _rgb_from_colormap_id(*, label_id: int) {
+//    r, g, b = LABEL_COLORMAP[label_id % len(LABEL_COLORMAP)].tolist()
+//    return r, g, b
+//}
+//
+//void MainWindow::rgb_from_label_colors(
+//    *, label: str, label_colors: dict[str, list[int]] | None
+//) {
+//    if not label_colors or label not in label_colors:
+//        return None
+//    rgb = label_colors[label]
+//    if len(rgb) != 3 or not all(0 <= c <= 255 for c in rgb):
+//        raise ValueError(f"Color for label must be 0-255 RGB tuple, but got: {rgb}")
+//    r, g, b = rgb
+//    return r, g, b
+//}
+//
+bool MainWindow::is_valid_label(
+    const QString &label, const QStringList &existing_labels, const QString &policy
+) {
+    if (policy.isEmpty()) {
+        return true;
+    }
+    if (policy == "exact") {
+        return existing_labels.contains(label);
+    }
+    return false;
+}
+
+QString MainWindow::format_window_title(
+    const QString &image_path,
+    int32_t file_index,
+    int32_t file_count,
+    const QImage &image,
+    bool dirty
+) {
+    QString title = tr("tl assistant");
+    if (!image_path.isEmpty()) {
+        title = QString("%1 - %2").arg(title, image_path);
+        if (file_count > 0 && file_index > -1)
+            title = QString("%1 [%2/%3]").arg(title).arg(file_index + 1).arg(file_count);
+    }
+    if (!this->image_.isNull())
+        title = QString("%1 | %2×%3").arg(title).arg(image_.width()).arg(image_.height());
+    if (dirty)
+        title = title + "*";
+    return title;
+}
+
+//QString MainWindow::resolve_label_path(*, image_or_label_path: str, output_dir: Path | None) {
+//    if is_label_file_path(filename=image_or_label_path):
+//        return image_or_label_path
+//    image_path = Path(image_or_label_path)
+//    parent = output_dir if output_dir is not None else image_path.parent
+//    return str(parent / f"{image_path.stem}{LABEL_FILE_SUFFIX}")
+//}
+//
+//QListWidgetItem *MainWindow::make_image_list_item(
+//    *, image_path: str, output_dir: Path | None
+//) {
+//    item = QtWidgets.QListWidgetItem(image_path)
+//    item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
+//    label_path = _resolve_label_path(
+//        image_or_label_path=image_path, output_dir=output_dir
+//    )
+//    has_label = QtCore.QFile.exists(label_path)
+//    item.setCheckState(Qt.CheckState.Checked if has_label else Qt.CheckState.Unchecked)
+//    return item
+//}
+//
+//ShapeDict MainWindow::shape_to_dict(shape: Shape) {
+//    assert shape.label is not None
+//    return ShapeDict(
+//        label=shape.label,
+//        points=shape.points.tolist(),
+//        shape_type=shape.shape_type,
+//        flags=shape.flags or {},
+//        description=shape.description or "",
+//        group_id=shape.group_id,
+//        mask=shape.mask,
+//        other_data=shape.other_data,
+//    )
+//}
 
 QStringList MainWindow::scan_image_files(const QString &root_dir) const {
     QStringList extensions;
@@ -2584,12 +2728,12 @@ QStringList MainWindow::scan_image_files(const QString &root_dir) const {
     return utils::natsorted(images);
 }
 
+
 //
 // User-assisted function.
-
+//
 MainWindow::~MainWindow() {
     delete ui_;
-    delete canvas_;
     SamApis::instance().unregister_all("");
     AppConfig::instance().save();
     spdlog::shutdown();

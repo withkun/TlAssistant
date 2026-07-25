@@ -13,27 +13,65 @@ bool download_ai_model(const std::string &name, Canvas *) {
     return true;
 }
 
-namespace {
-// 不能在QApplication前创建Qt对象
-//const QCursor CURSOR_DEFAULT = Qt::ArrowCursor;
-//const QCursor CURSOR_POINT   = Qt::PointingHandCursor;
-//const QCursor CURSOR_DRAW    = Qt::CrossCursor;
-//const QCursor CURSOR_MOVE    = Qt::ClosedHandCursor;
-//const QCursor CURSOR_GRAB    = Qt::OpenHandCursor;
 
 const double MOVE_SPEED     = 5.0f;
-}
+
+std::set<QString> _CreateMode {
+    "polygon",
+    "rectangle",
+    "oriented_rectangle",
+    "circle",
+    "line",
+    "point",
+    "linestrip",
+    "ai_points_to_shape",
+    "ai_box_to_shape",
+};
+
+std::set<QString> _AI_CREATE_MODES {
+    "ai_points_to_shape",
+    "ai_box_to_shape",
+};
+
+
+std::map<QString, QString> _CREATE_MODE_TO_SHAPE_TYPE {     // {CreateMode, ShapeType}
+    {"polygon",             "polygon"             },
+    {"rectangle",           "rectangle"           },
+    {"oriented_rectangle",  "oriented_rectangle"  },
+    {"circle",              "circle"              },
+    {"line",                "line"                },
+    {"point",               "point"               },
+    {"linestrip",           "linestrip"           },
+    {"ai_points_to_shape",  "points"              },
+    {"ai_box_to_shape",     "rectangle"           },
+};
+
+
+// Modes whose seed point cannot be reinterpreted as the start of another mode.
+// `point` finalizes on click so never has a partial shape; AI modes carry
+// per-point positive/negative labels. Every other mode in _CreateMode shares a
+// 1-click anchor and is seed-compatible by default — new modes participate
+// unless explicitly listed here.
+std::set<QString> _SEED_INCOMPATIBLE_CREATE_MODES {
+    "point",
+    "ai_points_to_shape",
+    "ai_box_to_shape",
+};
+
 
 Canvas::Canvas(float epsilon,
                const QString &double_click,
                int32_t num_backups,
-               const QMap<QString, bool> &crosshair) : QWidget() {
+               const QMap<QString, bool> &crosshair,
+               bool allow_out_of_bounds_points) : QWidget() {
     this->mode_                     = CanvasMode::EDIT;
 
     // polygon, rectangle, line, or point
-    this->createMode_               = "polygon";
+    this->create_mode_               = "polygon";
 
     this->fill_drawing_             = false;
+
+    this->show_labels_              = false;
 
     this->prevPoint_                = QPointF();
     this->prevMovePoint_            = QPointF();
@@ -61,12 +99,13 @@ Canvas::Canvas(float epsilon,
         QMap<QString, bool> {
             { "polygon",            false },
             { "rectangle",          true  },
+            { "oriented_rectangle", false },
             { "circle",             false },
             { "line",               false },
             { "point",              false },
             { "linestrip",          false },
             { "ai_points_to_shape", false },
-            { "ai_box_to_shape",    false },
+            { "ai_box_to_shape",    true  },
         };
 
     this->resetState();
@@ -94,7 +133,10 @@ Canvas::Canvas(float epsilon,
     // Menus
     // 0: right-click without selection and dragging of shapes
     // 1: right-click with selection and dragging of shapes
-    this->menus_                    = { new QMenu(), new QMenu() };
+    this->context_menus_ = {
+        .without_selection = new QMenu(),
+        .with_selection = new QMenu()
+    };
     this->setMouseTracking(true);
     this->setFocusPolicy(Qt::WheelFocus);
 }
@@ -103,13 +145,18 @@ bool Canvas::fillDrawing() const {
     return this->fill_drawing_;
 }
 
-void Canvas::setFillDrawing(bool value) {
+void Canvas::set_fill_drawing(bool value) {
     this->fill_drawing_ = value;
 }
 
 //@property
+bool Canvas::is_drawing() const {
+    return static_cast<bool>(this->current_);
+}
+
+//@property
 QString Canvas::createMode() const {
-    return this->createMode_;
+    return this->create_mode_;
 }
 
 //@createMode.setter
@@ -126,7 +173,7 @@ void Canvas::createMode(const QString &value) {
         }.contains(value)) {
         throw std::invalid_argument("Unsupported createMode: " + value.toStdString());
     }
-    this->createMode_ = value;
+    this->create_mode_ = value;
 }
 
 std::string Canvas::get_ai_model_name() {
@@ -204,7 +251,7 @@ void Canvas::storeShapes() {
 }
 
 //@property
-bool Canvas::isShapeRestorable() {
+bool Canvas::can_restore_shape() {
     // We save the state AFTER each edit (not before) so for an
     // edit to be undoable, we expect the CURRENT and the PREVIOUS state
     // to be in the undo stack.
@@ -214,11 +261,11 @@ bool Canvas::isShapeRestorable() {
     return true;
 }
 
-void Canvas::restoreShape() {
+void Canvas::restore_last_shape() {
     // This does _part_ of the job of restoring shapes.
     // The complete process is also done in app.py::undoShapeEdit
     // and app.py::loadShapes and our own Canvas::loadShapes function.
-    if (!isShapeRestorable()) {
+    if (!can_restore_shape()) {
         return;
     }
     shapesBackups_.pop_back();  //latest
@@ -265,7 +312,7 @@ bool Canvas::editing() {
     return mode_ == CanvasMode::EDIT;
 }
 
-void Canvas::setEditing(bool value) {
+void Canvas::set_editing(bool value) {
     mode_ = value ? CanvasMode::EDIT : CanvasMode::CREATE;
     if (mode_ == CanvasMode::EDIT) {
         // CREATE -> EDIT
@@ -311,12 +358,12 @@ bool Canvas::selectedEdge() {
 void Canvas::update_status(const std::list<QString> &extra_messages) {
     QStringList messages;
     if (drawing()) {
-        messages.append(tr("Creating %1").arg(createMode_));
+        messages.append(tr("Creating %1").arg(create_mode_));
         messages.append(get_create_mode_message());
         if (current_) {
             messages.append(tr("ESC to cancel"));
         }
-        if (canCloseShape()) {
+        if (can_close_shape()) {
             messages.append(tr("Enter or Space to finalize"));
         }
     } else {
@@ -332,25 +379,25 @@ void Canvas::update_status(const std::list<QString> &extra_messages) {
 QString Canvas::get_create_mode_message() {
     //assert self.drawing()
     bool isNew = !this->current_;
-    if (createMode_ == "ai_points_to_shape") {
+    if (create_mode_ == "ai_points_to_shape") {
         return tr(
             "Click points to include or Shift+Click to exclude."
             " Ctrl+LeftClick ends creation."
         );
     }
-    if (createMode_ == "ai_box_to_shape") {
+    if (create_mode_ == "ai_box_to_shape") {
         if (isNew)
             return tr("Click first corner of bbox for AI segmentation");
         else
             return tr("Click opposite corner to segment object");
     }
-    if (createMode_ == "line") {
+    if (create_mode_ == "line") {
         if (isNew)
             return tr("Click start point for line");
         else
             return tr("Click end point for line");
     }
-    if (createMode_ == "linestrip") {
+    if (create_mode_ == "linestrip") {
         if (isNew)
             return tr("Click start point for linestrip");
         else
@@ -358,17 +405,25 @@ QString Canvas::get_create_mode_message() {
                 "Click next point or finish by Ctrl/Cmd+Click for linestrip"
             );
     }
-    if (createMode_ == "circle") {
+    if (create_mode_ == "circle") {
         if (isNew)
             return tr("Click center point for circle");
         else
             return tr("Click point on circumference for circle");
     }
-    if (createMode_ == "rectangle") {
+    if (create_mode_ == "rectangle") {
         if (isNew)
             return tr("Click first corner for rectangle");
         else
             return tr("Click opposite corner for rectangle (Shift for square)");
+    }
+    if (create_mode_ == "oriented_rectangle") {
+        if (isNew)
+            return tr("Click first corner for oriented rectangle");
+        //assert self._current is not None
+        if (current_.points_.size() == 1)
+            return tr("Click second corner to set orientation");
+        return tr("Click third corner to close oriented rectangle");
     }
     return tr("Click to add point");
 }
@@ -398,10 +453,10 @@ void Canvas::mouseMoveEvent(QMouseEvent *event) {
 
     // Polygon drawing.
     if (drawing()) {
-        if (QKey{"ai_points_to_shape", "ai_box_to_shape"}.contains(createMode_)) {
+        if (QKey{"ai_points_to_shape", "ai_box_to_shape"}.contains(create_mode_)) {
             line_.shape_type("points");
         } else {
-            line_.shape_type(createMode_);
+            line_.shape_type(create_mode_);
         }
 
         overrideCursor(Qt::CrossCursor);
@@ -420,7 +475,7 @@ void Canvas::mouseMoveEvent(QMouseEvent *event) {
         } else if (
             snapping_ &&
             current_.size() > 1 &&
-            createMode_ == "polygon" &&
+            create_mode_ == "polygon" &&
             closeEnough(pos, current_[0]))
         {
             // Attract line to starting point and
@@ -429,16 +484,16 @@ void Canvas::mouseMoveEvent(QMouseEvent *event) {
             overrideCursor(Qt::PointingHandCursor);
             current_.highlightVertex(0, TlShape::NEAR_VERTEX);
         }
-        if (QKey{"polygon", "linestrip"}.contains(createMode_)) {
+        if (QKey{"polygon", "linestrip"}.contains(create_mode_)) {
             line_.points_ = { current_[-1], pos };
             line_.point_labels_ = { 1, 1 };
-        } else if (QKey{"ai_points_to_shape", "ai_box_to_shape"}.contains(createMode_)) {
+        } else if (QKey{"ai_points_to_shape", "ai_box_to_shape"}.contains(create_mode_)) {
             line_.points_ = { current_.points_.back(), pos };
             line_.point_labels_ = {
                 current_.point_labels_.back(),
                 is_shift_pressed ? 0 : 1,
             };
-        } else if (createMode_ == "rectangle") {
+        } else if (create_mode_ == "rectangle") {
             if (is_shift_pressed) {
                 prevMovePoint_ = pos = snap_cursor_pos_for_square(  // override
                     pos, current_[0]
@@ -447,15 +502,22 @@ void Canvas::mouseMoveEvent(QMouseEvent *event) {
             line_.points_ = { current_[0], pos };
             line_.point_labels_ = { 1, 1 };
             line_.close();
-        } else if (createMode_ == "circle") {
+        } else if (create_mode_ == "oriented_rectangle") {
+            const auto origin = (
+                current_.points_.size() == 1 ? current_.points_[0] : current_.points_[1]
+            );
+            line_.points_ = {origin, pos};
+            line_.point_labels_ = { 1, 1 };
+            //line_.close();
+        } else if (create_mode_ == "circle") {
             line_.points_ = { current_[0], pos };
             line_.point_labels_ = { 1, 1 };
             line_.shape_type("circle");
-        } else if (createMode_ == "line") {
+        } else if (create_mode_ == "line") {
             line_.points_ = { current_[0], pos };
             line_.point_labels_ = { 1, 1 };
             line_.close();
-        } else if (createMode_ == "point") {
+        } else if (create_mode_ == "point") {
             line_.points_ = { current_[0] };
             line_.point_labels_ = { 1 };
             line_.close();
@@ -606,23 +668,30 @@ void Canvas::mousePressEvent(QMouseEvent *event) {
         if (drawing()) {
             if (current_) {
                 // Add point to existing shape.
-                if (createMode_ == "polygon") {
+                if (create_mode_ == "polygon") {
                     current_.addPoint(line_[1]);
                     line_[0] = current_[-1];
                     if (current_.isClosed()) {
-                        finalise();
+                        finalize();
                     }
-                } else if (QKey{"rectangle", "circle", "line"}.contains(createMode_)) {
+                } else if (create_mode_ == "oriented_rectangle") {
+                    if (current_.points_.size() == 4) {
+                        finalize();
+                    } else {
+                        //assert len(current.points) == 1;
+                        lock_oriented_rectangle_first_edge(current_);
+                    }
+                } else if (QKey{"rectangle", "circle", "line"}.contains(create_mode_)) {
                     assert(current_.points_.size() == 1);
                     current_.points_ = line_.points_;
-                    finalise();
-                } else if (createMode_ == "linestrip") {
+                    finalize();
+                } else if (create_mode_ == "linestrip") {
                     current_.addPoint(line_[1]);
                     line_[0] = current_[-1];
                     if (event->modifiers() == Qt::ControlModifier) {
-                        finalise();
+                        finalize();
                     }
-                } else if (QKey{"ai_points_to_shape", "ai_box_to_shape"}.contains(createMode_)) {
+                } else if (QKey{"ai_points_to_shape", "ai_box_to_shape"}.contains(create_mode_)) {
                     current_.addPoint(
                         line_.points_[1],
                         line_.point_labels_[1]
@@ -630,11 +699,11 @@ void Canvas::mousePressEvent(QMouseEvent *event) {
                     line_.points_[0] = current_.points_.back();
                     line_.point_labels_[0] = current_.point_labels_.back();
                     if (event->modifiers() & Qt::ControlModifier) {
-                        finalise();
+                        finalize();
                     }
                 }
             } else if (!outOfPixmap(pos)) {
-                if (QKey{"ai_points_to_shape", "ai_box_to_shape"}.contains(createMode_)) {
+                if (QKey{"ai_points_to_shape", "ai_box_to_shape"}.contains(create_mode_)) {
                     if (!download_ai_model(this->sam_session_model_name_, this)) {
                         return;
                     }
@@ -642,27 +711,27 @@ void Canvas::mousePressEvent(QMouseEvent *event) {
 
                 // Create new shape.
                 QString initial_shape_type;
-                if (createMode_ == "ai_points_to_shape") {
+                if (create_mode_ == "ai_points_to_shape") {
                     initial_shape_type = "points";
-                } else if (createMode_ == "ai_box_to_shape") {
+                } else if (create_mode_ == "ai_box_to_shape") {
                     initial_shape_type = "points";
                 } else {
-                    initial_shape_type = createMode_;
+                    initial_shape_type = create_mode_;
                 }
                 current_ = TlShape("", TlShape::line_color, initial_shape_type);
                 current_.addPoint(pos, is_shift_pressed ? 0 : 1);
-                if (createMode_ == "point") {
-                    finalise();
+                if (create_mode_ == "point") {
+                    finalize();
                 } else if (
-                    QKey{"ai_points_to_shape", "ai_box_to_shape"}.contains(createMode_)
+                    QKey{"ai_points_to_shape", "ai_box_to_shape"}.contains(create_mode_)
                     && (event->modifiers() & Qt::ControlModifier)
                 ) {
-                    finalise();
+                    finalize();
                 } else {
-                    if (createMode_ == "circle")
+                    if (create_mode_ == "circle")
                         current_.shape_type("circle");
                     line_.points_ = {pos, pos};
-                    if (QKey{"ai_points_to_shape", "ai_box_to_shape"}.contains(createMode_) && is_shift_pressed) {
+                    if (QKey{"ai_points_to_shape", "ai_box_to_shape"}.contains(create_mode_) && is_shift_pressed) {
                         line_.point_labels_ = {0, 0};
                     } else
                         line_.point_labels_ = {1, 1};
@@ -701,9 +770,26 @@ void Canvas::mousePressEvent(QMouseEvent *event) {
     update_status({});
 }
 
+void Canvas::lock_oriented_rectangle_first_edge(TlShape &current) {
+    auto first_corner = line_.points_[0];
+    auto second_corner = line_.points_[1];
+    current_.points_ = {first_corner, second_corner, second_corner, first_corner};
+    current_.point_labels_ = {1, 1, 1, 1};
+
+    line_.points_ = { second_corner };
+    line_.point_labels_ = {1};
+}
+
+void Canvas::unlock_oriented_rectangle_first_edge(TlShape &current) {
+    auto anchor = current.points_[0];
+    current_.points_ = { anchor };
+    current_.point_labels_ = { 1 };
+    line_.points_ = { anchor, anchor };
+}
+
 void Canvas::mouseReleaseEvent(QMouseEvent *event) {
     if (event->button() == Qt::RightButton) {
-        auto menu = menus_[selectedShapesCopy_.size() > 0];
+        auto *menu = selectedShapesCopy_.size() > 0 ? context_menus_.with_selection : context_menus_.without_selection;
         restoreCursor();
         if (!menu->exec(mapToGlobal(event->pos())) && !selectedShapesCopy_.empty()) {
             // Cancel the move by deleting the shadow copy.
@@ -739,7 +825,7 @@ void Canvas::mouseReleaseEvent(QMouseEvent *event) {
     update_status({});
 }
 
-bool Canvas::endMove(bool copy) {
+bool Canvas::end_move(bool copy) {
     assert(!selectedShapes_.empty() && !selectedShapesCopy_.empty());
     assert(selectedShapesCopy_.size() == selectedShapes_.size());
     if (copy) {
@@ -773,15 +859,24 @@ void Canvas::setHiding(bool enable) {
     hideBackround1_ = enable ? hideBackround_ : false;
 }
 
-bool Canvas::canCloseShape() {
+bool Canvas::can_close_shape() {
     if (!drawing())
         return false;
     if (!current_)
         return false;
-    if (QKey{"ai_points_to_shape", "ai_box_to_shape"}.contains(createMode_))
+    if (QKey{"ai_points_to_shape", "ai_box_to_shape"}.contains(create_mode_))
         return true;
-    if (createMode_ == "linestrip")
+    if (create_mode_ == "linestrip")
         return current_.size() >= 2;
+    if (create_mode_ == "oriented_rectangle") {
+        // Points 2 and 3 are seeded as duplicates of points 1 and 0 after
+        // the first edge is locked; mouse movement reprojects them. Treat
+        // the shape as closeable only once the third corner has moved.
+        return (
+            current_.points_.size() == 4
+            && current_.points_[2] != current_.points_[1]
+        );
+    }
     return current_.size() >= 3;
 }
 
@@ -790,8 +885,8 @@ void Canvas::mouseDoubleClickEvent(QMouseEvent *event) {
         return;
     }
 
-    if (canCloseShape()) {
-        finalise();
+    if (can_close_shape()) {
+        finalize();
     }
 }
 
@@ -867,6 +962,12 @@ void Canvas::boundedMoveVertex(
             vertex_index,
             shape.points_.size()
         );
+        return;
+    }
+    if (shape.shape_type_ == "oriented_rectangle") {
+        //bounded_move_oriented_rectangle_vertex(
+        //    shape=shape, vertex_index=vertex_index, pos=pos
+        //);
         return;
     }
 
@@ -967,7 +1068,7 @@ void Canvas::paintEvent(QPaintEvent *event) {
 
     // draw crosshair
     if (
-        crosshair_[createMode_] &&
+        crosshair_[create_mode_] &&
         drawing() &&
         !prevMovePoint_.isNull() &&
         !outOfPixmap(prevMovePoint_))
@@ -1010,7 +1111,7 @@ void Canvas::paintEvent(QPaintEvent *event) {
     if (!current_ || !QKey{
         "polygon",
         "ai_points_to_shape",
-        "ai_box_to_shape"}.contains(createMode_))
+        "ai_box_to_shape"}.contains(create_mode_))
     {
         p.end();
         if (current_)
@@ -1019,7 +1120,7 @@ void Canvas::paintEvent(QPaintEvent *event) {
     }
 
     auto drawing_shape = current_.copy();
-    if (createMode_ == "polygon") {
+    if (create_mode_ == "polygon") {
         if (fillDrawing() && current_.points_.size() >= 2) {
             //assert drawing_shape.fill_color is not None
             if (drawing_shape.fill_color_.alpha() == 0) {
@@ -1031,7 +1132,7 @@ void Canvas::paintEvent(QPaintEvent *event) {
             }
             drawing_shape.addPoint(line_[1]);
         }
-    } else if (QKey{"ai_points_to_shape", "ai_box_to_shape"}.contains(createMode_)) {
+    } else if (QKey{"ai_points_to_shape", "ai_box_to_shape"}.contains(create_mode_)) {
         drawing_shape.addPoint(
             line_.points_[1],
             line_.point_labels_[1]
@@ -1058,6 +1159,132 @@ void Canvas::paintEvent(QPaintEvent *event) {
         current_.highlightClear();
 }
 
+void Canvas::render_canvas() {
+    ///self._palette_cache.clear()
+    ///painter: QtGui.QPainter = self._painter
+    ///painter.begin(self)
+    ///try:
+    ///    self._setup_world_transform(painter=painter)
+    ///    for layer in self._render_layers():
+    ///        layer(painter)
+    ///finally:
+    ///    painter.end()
+}
+
+void Canvas::setup_world_transform(QPainter &painter) {
+    ///for hint in (
+    ///    QtGui.QPainter.RenderHint.Antialiasing,
+    ///    QtGui.QPainter.RenderHint.SmoothPixmapTransform,
+    ///):
+    ///    painter.setRenderHint(hint);
+    ///painter.translate(self._compute_image_origin_offset() * self.scale);
+}
+
+void Canvas::render_layers() {
+    ///// Order is z-order, back-to-front.
+    ///return (
+    ///    self._draw_pixmap_layer,
+    ///    self._draw_crosshair_layer,
+    ///    self._draw_committed_shapes_layer,
+    ///    self._draw_active_shape_layer,
+    ///    self._draw_drag_copy_layer,
+    ///    self._draw_preview_overlay_layer,
+    ///);
+}
+
+void Canvas::draw_pixmap_layer(QPainter &painter) {
+    ///target = QtCore.QRectF(
+    ///    0.0,
+    ///    0.0,
+    ///    self.pixmap.width() * self.scale,
+    ///    self.pixmap.height() * self.scale,
+    ///);
+    ///painter.drawPixmap(target, self.pixmap, QtCore.QRectF(self.pixmap.rect()));
+}
+
+void Canvas::draw_crosshair_layer(QPainter &painter) {
+    ///cursor: QPointF | None = self._prev_move_point;
+    ///if not self._should_draw_crosshair(cursor=cursor):
+    ///    return;
+    ///assert cursor is not None;
+    ///painter.setPen(self.palette().color(QtGui.QPalette.ColorRole.WindowText));
+    ///cx = int(cursor.x() * self.scale);
+    ///cy = int(cursor.y() * self.scale);
+    ///if self._allow_out_of_bounds_points:
+    ///    // The cursor may be in the margin around the image, so span the whole
+    ///    // viewport instead of stopping the lines at the image edge.
+    ///    offset = self._compute_image_origin_offset() * self.scale;
+    ///    area = super().size();
+    ///    left = int(-offset.x());
+    ///    top = int(-offset.y());
+    ///    right = int(-offset.x() + area.width());
+    ///    bottom = int(-offset.y() + area.height());
+    ///else:
+    ///    left = top = 0;
+    ///    right = int(self.pixmap.width() * self.scale) - 1;
+    ///    bottom = int(self.pixmap.height() * self.scale) - 1;
+    ///painter.drawLine(left, cy, right, cy);
+    ///painter.drawLine(cx, top, cx, bottom);
+}
+
+bool Canvas::should_draw_crosshair(QPointF &cursor) {
+    ///if self.mode != _CanvasMode.CREATE:
+    ///    return False;
+    ///if not self._crosshair[self._create_mode]:
+    ///    return False;
+    ///if cursor is None:
+    ///    return False;
+    ///return not self._should_constrain_to_pixmap(cursor);
+    return false;
+}
+
+void Canvas::draw_committed_shapes_layer(QPainter &painter) {
+    ///for shape in self.shapes:
+    ///    if not shape.visible:
+    ///        continue;
+    ///    context = self._render_context(
+    ///        shape=shape, highlighted=shape is self.hovered_shape
+    ///    );
+    ///    render_shape(painter=painter, shape=shape, context=context);
+}
+
+void Canvas::draw_active_shape_layer(QPainter &painter) {
+    ///if self._current is None:
+    ///    return;
+    ///assert len(self._line.points) == len(self._line.point_labels);
+    ///self._render_draft(painter=painter, draft=self._current, highlighted=True);
+    ///self._render_draft(painter=painter, draft=self._line, highlighted=False);
+}
+
+void Canvas::draw_drag_copy_layer(QPainter &painter) {
+    ///for copy_shape in self._selected_shapes_copy:
+    ///    context = ShapeRenderContext(
+    ///        scale=self.scale,
+    ///        palette=self._resolve_palette(copy_shape.label),
+    ///        point_size=self._point_size,
+    ///        point_type=self._point_type,
+    ///        selected=True,
+    ///        fill=True,
+    ///        highlight=None,
+    ///        rotation_highlight=None,
+    ///        show_label=self._show_labels,
+    ///    );
+    ///    render_shape(painter=painter, shape=copy_shape, context=context);
+}
+
+void Canvas::draw_preview_overlay_layer(QPainter &painter) {
+    ///preview = self._build_preview_shape();
+    ///if preview is None:
+    ///    return;
+    ///context = self._draft_render_context(
+    ///    selected=self._fill_drawing,
+    ///    fill=self._fill_drawing,
+    ///    highlight=None,
+    ///    rotation_highlight=None,
+    ///);
+    ///render_shape(painter=painter, shape=preview, context=context);
+}
+
 QPointF Canvas::transformPos(QPointF point) {
     // Convert from widget-logical coordinates to painter-logical ones.
     return point / scale_ - offsetToCenter();
@@ -1082,10 +1309,10 @@ bool Canvas::outOfPixmap(const QPointF &p) {
     return !(0 <= p.x() && p.x() <= w && 0 <= p.y() && p.y() <= h);
 }
 
-void Canvas::finalise() {
+void Canvas::finalize() {
     assert(current_);
     QList<TlShape> new_shapes;
-    if (QKey{"ai_points_to_shape", "ai_box_to_shape"}.contains(createMode_)) {
+    if (QKey{"ai_points_to_shape", "ai_box_to_shape"}.contains(create_mode_)) {
         std::lock_guard<std::mutex> lock{mutex_};
         new_shapes = ai_assist_shapes_;
     } else {
@@ -1174,9 +1401,9 @@ void Canvas::keyPressEvent(QKeyEvent *event) {
             update();
         } else if (
             (key == Qt::Key_Return || key == Qt::Key_Space) &&
-            canCloseShape()
+            can_close_shape()
         ) {
-            finalise();
+            finalize();
         } else if (modifiers == Qt::AltModifier) {
             snapping_ = false;
         }
@@ -1243,7 +1470,7 @@ QList<TlShape> Canvas::setLastLabel(const QString &text, int32_t group_id, const
 
 void Canvas::undoLastLine() {
     assert(self.shapes);
-    if (QKey{"ai_points_to_shape", "ai_box_to_shape"}.contains(createMode_)) {
+    if (QKey{"ai_points_to_shape", "ai_box_to_shape"}.contains(create_mode_)) {
         // Remove all unlabeled shapes at the tail (added by AI in one shot)
         while (!shapes_.empty() && shapes_.back().label_.isEmpty())
             shapes_.pop_back();
@@ -1257,18 +1484,25 @@ void Canvas::undoLastLine() {
     current_ = shapes_.back(); shapes_.pop_back();
     current_.setOpen();
     current_.restoreShapeRaw();
-    if (QKey{"polygon", "linestrip"}.contains(createMode_)) {
+    if (QKey{"polygon", "linestrip"}.contains(create_mode_)) {
         line_.points_ = { current_[-1], current_[0] };
-    } else if (QKey{"rectangle", "line", "circle"}.contains(createMode_)) {
+    } else if (QKey{"rectangle", "line", "circle"}.contains(create_mode_)) {
         current_.points_ = { current_.points_[0], current_.points_[1] };
-    } else if (createMode_ == "point") {
+    } else if (create_mode_ == "point") {
         current_.clear();
+    } else {
+        //assert self.create_mode == "oriented_rectangle"
     }
     emit drawingPolygon(true);
 }
 
 void Canvas::undoLastPoint() {
     if (!current_ || current_.isClosed()) {
+        return;
+    }
+    if (create_mode_ == "oriented_rectangle" && current_.points_.size() == 4) {
+        unlock_oriented_rectangle_first_edge(current_);
+        update();
         return;
     }
     current_.popPoint();
@@ -1358,7 +1592,7 @@ TlShape Canvas::shape_from_annotation(
 
     auto &mask = annotation.mask;
 
-    if (createMode_ == "ai_box_to_shape") {
+    if (create_mode_ == "ai_box_to_shape") {
         int32_t x1, y1, x2, y2;
         if (annotation.bbox.isNone()) {
             const cv::Rect bbox = utils::masks_to_bboxes(mask);
@@ -1377,7 +1611,7 @@ TlShape Canvas::shape_from_annotation(
         );
         shape.close();
         return shape;
-    } else if (createMode_ == "ai_points_to_shape") {
+    } else if (create_mode_ == "ai_points_to_shape") {
         auto points = measure::compute_polygon_from_mask(mask);
         if (points.size() < 2)
             return {};

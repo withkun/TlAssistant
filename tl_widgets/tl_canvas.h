@@ -36,6 +36,11 @@ enum class CanvasMode: int32_t {
     EDIT   = 1,
 };
 
+struct ContextMenuPair {
+    QMenu *without_selection;
+    QMenu *with_selection;
+};
+
 inline QString ModeName(const CanvasMode c) {
     const static std::map<CanvasMode, QString> ModeNames = {
         {CanvasMode::CREATE, "CREATE"},
@@ -53,6 +58,40 @@ inline QString ModeName(const CanvasMode c) {
 //    }
 //ENUM_TO_STRING(CanvasMode, "CREATE", "EDIT");
 
+class DraftShape {
+public:
+    void close() {
+        closed_ = true;
+    }
+    void open() {
+        closed_ = false;
+    }
+
+    void add_point(const QPointF &point, const int32_t label = 1, const bool autoclose = false) {
+        if (autoclose && !points_.empty() && points_[0] == point) {
+            closed_ = true;
+            return;
+        }
+
+        points_.push_back(point);
+        point_labels_.push_back(label);
+    }
+
+    void pop_point() {
+        if (points_.empty()) {
+            return;
+        }
+
+        points_.pop_back();
+        point_labels_.pop_back();
+    }
+
+    bool                closed_{false};
+    QString             shape_type_{"polygon"};
+    QList<QPointF>      points_;
+    QList<int32_t>      point_labels_;
+};
+
 
 class Canvas : public QWidget {
     Q_OBJECT
@@ -60,7 +99,8 @@ public:
     explicit Canvas(float epsilon,
                     const QString &double_click="close",
                     int32_t num_backups=10,
-                    const QMap<QString, bool> &crosshair={});
+                    const QMap<QString, bool> &crosshair={},
+                    bool allow_out_of_bounds_points=false);
     ~Canvas() override;
 
     QSize sizeHint() const override;
@@ -94,8 +134,9 @@ signals:
 
 private:
     friend class MainWindow;
-    QString                             createMode_;
+    QString                             create_mode_;
     bool                                fill_drawing_;
+    bool                                show_labels_;
 
     float                               epsilon_{10.0};
     QString                             double_click_;
@@ -150,10 +191,11 @@ private:
     bool                                is_dragging_;
     bool                                is_dragging_enabled_;
 
-    QList<QMenu *>                      menus_;
+    ContextMenuPair                     context_menus_;
 
     bool fillDrawing() const;
-    void setFillDrawing(bool value);
+    void set_fill_drawing(bool value);
+    bool is_drawing() const;
     QString createMode()  const;
     void createMode(const QString &value);
     std::string get_ai_model_name();
@@ -164,12 +206,12 @@ private:
     QList<TlShape> shapes_from_bbox_ai(const QList<QPointF> &bbox_points);
 
     void storeShapes();
-    bool isShapeRestorable();
-    void restoreShape();
+    bool can_restore_shape();
+    void restore_last_shape();
     bool isVisible(const TlShape &shape);
     bool drawing();
     bool editing();
-    void setEditing(bool value = true);
+    void set_editing(bool value = true);
     bool set_highlight(int32_t hShape, int32_t hEdge, int32_t hVertex);
     bool selectedVertex();
     bool selectedEdge();
@@ -178,10 +220,12 @@ private:
     void highlight_hover_shape(QPointF pos, std::list<QString> &status_messages);
     void addPointToEdge();
     void removeSelectedPoint();
-    bool endMove(bool copy);
+    void lock_oriented_rectangle_first_edge(TlShape &current);
+    void unlock_oriented_rectangle_first_edge(TlShape &current);
+    bool end_move(bool copy);
     void hideBackroundShapes(bool value);
     void setHiding(bool enable = true);
-    bool canCloseShape();
+    bool can_close_shape();
     void selectShapes(const QList<TlShape> &shapes);
     void selectShapePoint(const QPointF &point, bool multiple_selection_mode);
     void calculateOffsets(const QPointF &point);
@@ -190,11 +234,23 @@ private:
     bool deSelectShape();
     QList<TlShape> deleteSelected();
     void deleteShape(const TlShape &shape);
+
+    void render_canvas();
+    void setup_world_transform(QPainter &painter);
+    void render_layers();
+    void draw_pixmap_layer(QPainter &painter);
+    void draw_crosshair_layer(QPainter &painter);
+    bool should_draw_crosshair(QPointF &cursor);
+    void draw_committed_shapes_layer(QPainter &painter);
+    void draw_active_shape_layer(QPainter &painter);
+    void draw_drag_copy_layer(QPainter &painter);
+    void draw_preview_overlay_layer(QPainter &painter);
+
     QPointF transformPos(QPointF point);
     void enableDragging(bool enabled);
     QPointF offsetToCenter();
     bool outOfPixmap(const QPointF &p);
-    void finalise();
+    void finalize();
     bool closeEnough(const QPointF &p1, const QPointF &p2);
     void moveByKeyboard(QPointF offset);
     QList<TlShape> setLastLabel(const QString &text, int32_t group_id, const QString &description, const QMap<QString, bool> &flags);

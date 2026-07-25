@@ -29,20 +29,20 @@ std::string Blob::path() const {
     if (!std::filesystem::exists(path)) {
         TCHAR szPath[1024]{};
         SHGetSpecialFolderPath(nullptr, szPath, CSIDL_PROFILE, 0);
-        path = std::filesystem::path{szPath};
-        path /= ".cache/osam/models/blobs";
+        path = std::filesystem::path{szPath} / ".cache" / "osam" / "models" / "blobs";
     }
 
     if (!attachments_.url_.empty()) {
         std::string safe_hash = hash_;
         if (const auto pos = safe_hash.find("sha256:"); pos != std::string::npos) {
-            safe_hash.replace(pos, strlen("sha256:"), "sha256-");
+            safe_hash.replace(pos, std::strlen("sha256:"), "sha256-");
         }
         path /= safe_hash;
     }
     path /= filename();
+    path.make_preferred();
 
-    SPDLOG_INFO("===> path: {}", path.generic_string());
+    SPDLOG_INFO("===> path: {}", path.string());
     return std::filesystem::absolute(path).generic_string();
 }
 

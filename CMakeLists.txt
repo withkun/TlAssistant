@@ -92,6 +92,10 @@ set(TL_SOURCES
     tl_widgets/tl_train_widget.cpp
     tl_widgets/zoom_widget.h
     tl_widgets/zoom_widget.cpp
+    tl_widgets/shape_clipboard.h
+    tl_widgets/shape_clipboard.cpp
+    tl_widgets/shape_render.h
+    tl_widgets/shape_render.cpp
 )
 
 set(AI_SOURCES

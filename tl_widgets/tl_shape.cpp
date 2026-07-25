@@ -11,6 +11,21 @@
 #include <QUuid>
 
 
+QSet<QString> ShapeType{
+    "polygon",
+    "rectangle",
+    "oriented_rectangle",
+    "point",
+    "line",
+    "circle",
+    "linestrip",
+    "points",
+    "mask",
+};
+
+QSet<QString> POLYLINE_SHAPE_TYPES{ "polygon", "linestrip" };
+
+
 // 类变量  ->  成员变量
 // 对类变量的修改会影响所有实例(除非在方法中修改为局部变量), 而对实例变量的修改只影响该特定实例
 // The following class variables influence the drawing of all shape objects.
@@ -110,16 +125,7 @@ void TlShape::shape_type(QString value) {
     if (value.isEmpty()) {
         value = "polygon";
     }
-    if (!QKey{"polygon",
-              "rectangle",
-              "oriented_rectangle",
-              "point",
-              "line",
-              "circle",
-              "linestrip",
-              "points",
-              "mask",
-              }.contains(value)) {
+    if (!ShapeType.contains(value)) {
         throw std::invalid_argument("Unexpected shape_type: " + value.toStdString());
     }
     this->shape_type_ = value;
