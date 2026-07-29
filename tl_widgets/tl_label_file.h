@@ -4,6 +4,7 @@
 #include <QObject>
 #include "tl_shape.h"
 
+
 class ShapeDict {
 public:
     QString                 label;

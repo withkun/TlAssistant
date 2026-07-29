@@ -3,6 +3,7 @@
 
 #include "model.h"
 
+
 class SamBase : public Model {
 public:
     virtual cv::Mat generate_mask_from_image_embedding(ImageEmbedding &image_embedding, const Prompt &prompt) = 0;

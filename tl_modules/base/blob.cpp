@@ -1,9 +1,9 @@
 #include "blob.h"
+#include "spdlog/spdlog.h"
 
 #include <Shlobj.h>
 #include <filesystem>
 #include <QCoreApplication>
-#include "spdlog/spdlog.h"
 
 
 Blob::Blob(const std::string &url, const std::string &hash, const Attachment &attach) {

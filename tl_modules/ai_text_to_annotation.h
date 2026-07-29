@@ -6,6 +6,7 @@
 #include <QComboBox>
 #include <QDoubleSpinBox>
 
+
 class AiTextToAnnotation : public QWidget {
     Q_OBJECT
 public:

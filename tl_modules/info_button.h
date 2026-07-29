@@ -3,6 +3,7 @@
 
 #include <QToolButton>
 
+
 class InfoButton : public QToolButton {
     Q_OBJECT
 public:

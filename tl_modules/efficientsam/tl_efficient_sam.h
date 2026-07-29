@@ -3,6 +3,7 @@
 
 #include "base/sam_base.h"
 
+
 class EfficientSam : public SamBase {
 public:
     ImageEmbedding encode_image(const cv::Mat &image) override {

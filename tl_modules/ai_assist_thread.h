@@ -3,6 +3,7 @@
 
 #include <QThread>
 
+
 class Canvas;
 class AiAssistThread : public QThread {
     Q_OBJECT

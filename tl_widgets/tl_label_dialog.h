@@ -10,6 +10,7 @@
 #include <QVBoxLayout>
 #include <QTextEdit>
 
+
 class LabelLineEdit : public QLineEdit {
     Q_OBJECT
 public:

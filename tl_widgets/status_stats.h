@@ -3,6 +3,7 @@
 
 #include <QLabel>
 
+
 class StatusStats : public QLabel {
     Q_OBJECT
 public:

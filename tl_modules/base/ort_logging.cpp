@@ -3,6 +3,7 @@
 #include <map>
 #include <regex>
 
+
 //OrtLoggingFunction
 //void* param: 用户自定义数据的指针, 可以用来传递上下文信息或配置选项给日志处理函数
 //int level: 日志的级别

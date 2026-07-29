@@ -3,6 +3,7 @@
 
 #include "base/model.h"
 
+
 class YoloWorld : public Model {
 public:
     ImageEmbedding encode_image(const cv::Mat &image) override;

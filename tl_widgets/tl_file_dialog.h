@@ -4,6 +4,7 @@
 #include <QFileDialog>
 #include <QScrollArea>
 
+
 class ScrollAreaPreview : public QScrollArea {
 };
 

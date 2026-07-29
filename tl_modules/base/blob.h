@@ -3,6 +3,7 @@
 
 #include <string>
 
+
 class Attachment {
 public:
     std::string url_;

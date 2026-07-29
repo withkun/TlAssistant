@@ -35,10 +35,9 @@
 #ifndef __INC_BASE64_H
 #define __INC_BASE64_H
 
-#include <string>
-
 #include <QString>
 #include <QByteArray>
+
 
 namespace base64 {
 const static std::string base64_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"

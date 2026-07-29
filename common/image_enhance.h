@@ -3,6 +3,7 @@
 
 #include <QImage>
 
+
 class Enhance {
 public:
     explicit Enhance(const QImage &image);

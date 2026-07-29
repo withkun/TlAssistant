@@ -5,6 +5,7 @@
 #include <algorithm>
 #include "opencv2/opencv.hpp"
 
+
 namespace np {
 // 返回元素的符号，即1（正数），0（零），或-1（负数）
 template<typename T>

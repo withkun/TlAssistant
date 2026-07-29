@@ -13,7 +13,6 @@ bool download_ai_model(const std::string &name, Canvas *) {
     return true;
 }
 
-
 const double MOVE_SPEED     = 5.0f;
 
 std::set<QString> _CreateMode {

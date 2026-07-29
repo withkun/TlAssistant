@@ -7,6 +7,7 @@
 
 #include "base/model.h"
 
+
 class SamApis {
 public:
     using FactoryFunc = std::function<std::shared_ptr<Model>()>;

@@ -2,8 +2,7 @@
 #define __INC_NATSORT_H
 
 #include <vector>
-#include <QString>
-#include <QList>
+#include <QStringList>
 
 
 class natsort {

@@ -3,6 +3,7 @@
 
 #include "base/model.h"
 
+
 using EmbeddingCache = std::deque<std::pair<size_t, ImageEmbedding>>;
 
 class SamSession {

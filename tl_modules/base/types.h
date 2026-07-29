@@ -4,6 +4,7 @@
 #include "opencv2/opencv.hpp"
 #include "onnxruntime_cxx_api.h"
 
+
 class Prompt {
 public:
     Prompt() = default;

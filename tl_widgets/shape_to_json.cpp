@@ -3,6 +3,7 @@
 
 #include <QBuffer>
 
+
 namespace nlohmann {
 void to_json(nlohmann::json &json, const QString &value) {
     json = value.toStdString();

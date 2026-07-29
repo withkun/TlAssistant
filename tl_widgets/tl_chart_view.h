@@ -3,6 +3,7 @@
 
 #include <QtCharts>
 
+
 class TlChartView : public QChartView {
     Q_OBJECT
 public:

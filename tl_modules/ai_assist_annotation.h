@@ -4,6 +4,7 @@
 #include <QWidget>
 #include <QComboBox>
 
+
 class AiAssistAnnotation : public QWidget {
     Q_OBJECT
 public:

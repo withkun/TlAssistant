@@ -5,6 +5,7 @@
 #include "types.h"
 #include "utilities.h"
 
+
 struct InferenceSession {
     std::shared_ptr<Ort::Session>           session_;
 

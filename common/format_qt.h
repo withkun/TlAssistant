@@ -9,8 +9,8 @@
 #include <QRectF>
 #include <QString>
 #include <QColor>
-
 #include "spdlog/spdlog.h"
+
 
 inline std::ostream &operator<<(std::ostream &out, const QString &val) {
     return out << val.toStdString();

@@ -1,10 +1,10 @@
 #ifndef __INC_CONFIG_H
 #define __INC_CONFIG_H
 
-#include "yaml-cpp/yaml.h"
-
 #include <QMap>
 #include <QString>
+#include "yaml-cpp/yaml.h"
+
 
 const auto YAML_STR = [](const auto &node) {
     return node.IsNull() ? std::string() : node.as<std::string>();

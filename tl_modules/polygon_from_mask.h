@@ -3,6 +3,7 @@
 
 #include "opencv2/opencv.hpp"
 
+
 namespace measure {
 std::vector<cv::Point2d> approximate_polygon(const std::vector<cv::Point2d> &coords, double tolerance);
 

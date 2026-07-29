@@ -4,6 +4,7 @@
 #include <QDialog>
 #include <QSlider>
 
+
 class BrightnessContrast : public QDialog {
 public:
     explicit BrightnessContrast(const QImage &img, const std::function<void(const QImage &img)> &callback, QWidget *parent = nullptr);

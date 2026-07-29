@@ -1,5 +1,4 @@
 #include "tl_tool_bar.h"
-
 #include "utilities.h"
 
 #include <QLayout>

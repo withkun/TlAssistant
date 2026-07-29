@@ -3,6 +3,7 @@
 
 #include <QListWidget>
 
+
 class EscapableQListWidget : public QListWidget {
     Q_OBJECT
 protected:

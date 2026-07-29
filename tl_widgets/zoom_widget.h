@@ -3,6 +3,7 @@
 
 #include <QSpinBox>
 
+
 class ZoomWidget : public QSpinBox {
     Q_OBJECT
 public:

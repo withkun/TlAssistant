@@ -11,7 +11,6 @@
 
 // default_config_file = os.path.join(os.path.expanduser("~"), ".labelmerc")
 // 'c:/Users/njtl007/.labelmerc'
-
 YAML::Node get_config() {
     const auto HomeLocation = QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
     YAML::Node config = YAML::LoadFile("C:/Users/njtl007/.labelmerc");

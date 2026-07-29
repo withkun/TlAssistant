@@ -5,6 +5,7 @@
 #include "sam_session.h"
 #include "tl_widgets/tl_shape.h"
 
+
 namespace bbox_from_text {
 void get_bboxes_from_texts(
     const GenerateResponse &response,

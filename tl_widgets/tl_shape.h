@@ -9,6 +9,7 @@
 #include <QColor>
 #include <QMap>
 
+
 class TlShape : public QObject {
     Q_OBJECT
 public:

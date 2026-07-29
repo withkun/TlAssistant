@@ -6,6 +6,7 @@
 #include <QCoreApplication>
 #include <fstream>
 
+
 class AppConfig::Impl {
 public:
     explicit Impl(AppConfig *thiz) : thiz_(thiz) {
@@ -19,7 +20,6 @@ public:
     AppConfig                  *thiz_;
     nlohmann::json              initConfig_;                    //
 };
-
 
 nlohmann::json AppConfig::Impl::load(bool defaultOnly) {
     const auto app_config = QFileInfo(QCoreApplication::applicationDirPath() + QDir::separator() + "app_config.json");
