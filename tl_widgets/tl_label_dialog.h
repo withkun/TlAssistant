@@ -1,7 +1,7 @@
 #ifndef __INC_LABEL_DIALOG_H
 #define __INC_LABEL_DIALOG_H
 
-#include "tl_utils.h"
+#include "utilities.h"
 
 #include <QDialog>
 #include <QLineEdit>

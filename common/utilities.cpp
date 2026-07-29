@@ -1,4 +1,4 @@
-#include "tl_utils.h"
+#include "utilities.h"
 
 #include "common/base64.h"
 #include "opencv2/geometry/2d.hpp"
@@ -101,7 +101,7 @@ QValidator *utils::labelValidator() {
 }
 
 // 向量点积
-double dot(const std::vector<double> &a, const std::vector<double> &b) {
+static double dot(const std::vector<double> &a, const std::vector<double> &b) {
     double sum = 0;
     for (size_t i = 0; i < a.size(); ++i) {
         sum += a[i] * b[i];
@@ -110,11 +110,11 @@ double dot(const std::vector<double> &a, const std::vector<double> &b) {
 }
 
 // 向量模长
-double mod(const std::vector<double> &v) {
+static double mod(const std::vector<double> &v) {
     return dot(v, v);
 }
 
-double pnt_to_line(const QPointF &point, const QLineF &line) {
+static double pnt_to_line(const QPointF &point, const QLineF &line) {
     std::vector<double> AP = {point.x() - line.x1(), point.y() - line.y1()};
     std::vector<double> BP = {point.x() - line.x2(), point.y() - line.y2()};
 
@@ -190,7 +190,7 @@ qreal utils::distance(const QPointF &p1, const QPointF &p2) {
 
 // 计算点到线段的距离
 qreal utils::distanceToLine(const QPointF &point, const QLineF &line) {
-    /* 点到线段距离:
+    /** 点到线段距离:
      *
      *  方法一: 经典算法
      *    先判断点在线段端点、点在线上等等的特殊情况, 逐步的由特殊到一般, 当忽略点在线段上的特殊情况时, 判断点到线段方向的垂线是否落在线段上的方法是通过比较横纵坐标的方式来判断, 最后把不同的判断情况用不同的几何方式来进行处理计算得出结果。
@@ -200,7 +200,7 @@ qreal utils::distanceToLine(const QPointF &point, const QLineF &line) {
      *
      *  方法三: 矢量算法
      *    矢量算法过程清晰, 如果具有一定的空间几何基础, 则是解决此类问题时应优先考虑的方法。当需要计算的数据量很大时, 这种方式优势明显。
-     **/
+    **/
     const auto dist_ab = distance(line.p1(), line.p2()); // 线段长度
     const auto dist_pa = distance(point, line.p1());     // 到起点的距离
     const auto dist_pb = distance(point, line.p2());     // 到终点的距离
@@ -247,25 +247,27 @@ QString utils::HashPixmap(const QPixmap &pixmap) {
     hash.addData(byteArray);
     const QByteArray hashResult = hash.result();
 
-    return QString(hashResult.toHex()); // 将结果转换为十六进制字符串形式
+    return hashResult.toHex();  // 将结果转换为十六进制字符串形式
 }
 
 cv::Mat utils::ImageToMat(const QImage &image) {
+    const auto data = (void *)image.bits();
+    const auto step = static_cast<size_t>(image.bytesPerLine());
     switch (image.format()) {
         case QImage::Format_Grayscale8: {     // 灰度图, 每个像素点1个字节(8位)
             // Mat构造：行数, 列数, 存储结构, 数据, step每行多少字节
-            return cv::Mat(image.height(), image.width(), CV_8UC1, (void *)image.bits(), image.bytesPerLine());
+            return cv::Mat(image.height(), image.width(), CV_8UC1, data, step);
         }
         case QImage::Format_ARGB32:     // uint32存储0xAARRGGBB, pc一般小端存储低位在前, 所以字节顺序就成了BGRA
         case QImage::Format_RGB32:      // Alpha为FF
         case QImage::Format_ARGB32_Premultiplied: {
-            return cv::Mat(image.height(), image.width(), CV_8UC4, (void *)image.bits(), image.bytesPerLine());
+            return cv::Mat(image.height(), image.width(), CV_8UC4, data, step);
         }
         case QImage::Format_RGB888: {   // RR,GG,BB字节顺序存储
-            return cv::Mat(image.height(), image.width(), CV_8UC3, (void *)image.bits(), image.bytesPerLine());
+            return cv::Mat(image.height(), image.width(), CV_8UC3, data, step);
         }
         case QImage::Format_RGBA64: {   // uint64存储, 顺序和Format_ARGB32相反, RGBA
-            return cv::Mat(image.height(), image.width(), CV_16UC4, (void *)image.bits(), image.bytesPerLine());
+            return cv::Mat(image.height(), image.width(), CV_16UC4, data, step);
         }
         default: {
             throw std::runtime_error(std::format("Unknown image format: {}", static_cast<int32_t>(image.format())));
@@ -274,23 +276,24 @@ cv::Mat utils::ImageToMat(const QImage &image) {
 }
 
 QImage utils::MatToImage(const cv::Mat &mat) {
-    const auto cv_type = mat.type(); //防止警告
-    switch (cv_type) {
+    const auto type = mat.type(); //防止警告
+    const auto data = static_cast<const uint8_t *>(mat.data);
+    switch (type) {
         case CV_8UC1: {
             // QImage构造：数据, 宽度, 高度, 每行多少字节, 存储结构
-            return QImage(static_cast<const uint8_t *>(mat.data), mat.cols, mat.rows, mat.step, QImage::Format_Grayscale8);
+            return QImage(data, mat.cols, mat.rows, mat.step, QImage::Format_Grayscale8);
         }
         case CV_8UC3: {
-            return QImage(static_cast<const uint8_t *>(mat.data), mat.cols, mat.rows, mat.step, QImage::Format_RGB888).rgbSwapped();
+            return QImage(data, mat.cols, mat.rows, mat.step, QImage::Format_RGB888).rgbSwapped();
         }
         case CV_8UC4: {
-            return QImage(static_cast<const uint8_t *>(mat.data), mat.cols, mat.rows, mat.step, QImage::Format_ARGB32);
+            return QImage(data, mat.cols, mat.rows, mat.step, QImage::Format_ARGB32);
         }
         case CV_16UC4: {
-            return QImage(static_cast<const uint8_t *>(mat.data), mat.cols, mat.rows, mat.step, QImage::Format_RGBA64).rgbSwapped();
+            return QImage(data, mat.cols, mat.rows, mat.step, QImage::Format_RGBA64).rgbSwapped();
         }
         default: {
-            return QImage();
+            return {};
         }
     }
 }
@@ -352,7 +355,7 @@ std::vector<cv::Rect> utils::masks_to_bboxes1(const std::vector<cv::Mat> &masks)
 }
 
 cv::Mat utils::img_data_to_arr(const QByteArray &img_data) {
-    return cv::Mat();
+    return {};
 }
 
 QByteArray utils::img_arr_to_data(const cv::Mat &img_data) {
@@ -398,15 +401,15 @@ void toFile(const std::string &name, const Ort::Value &tensor) {
 
 void fromFile(const std::string &path, const cv::Mat &blob) {
     std::ifstream ifs(path, std::ios::in|std::ios::binary|std::ios::ate);
-    const size_t model_size = ifs.tellg();
-    ifs.seekg(0, ifs.beg);
+    const std::streamsize model_size = ifs.tellg();
+    ifs.seekg(0, std::ifstream::beg);
     ifs.read(reinterpret_cast<char *>(blob.data), model_size);
 }
 
 void fromFile(const std::string &path, std::vector<float> &blob) {
     std::ifstream ifs(path, std::ios::in|std::ios::binary|std::ios::ate);
-    const size_t model_size = ifs.tellg();
-    ifs.seekg(0, ifs.beg);
+    const std::streamsize model_size = ifs.tellg();
+    ifs.seekg(0, std::ifstream::beg);
     ifs.read(reinterpret_cast<char *>(blob.data()), model_size);
 }
 

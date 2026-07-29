@@ -22,10 +22,10 @@
 #include <QStyleHints>
 #include <QMimeData>
 
+#include "common/utilities.h"
 #include "common/natsort.h"
 #include "config/app_config.h"
 #include "config/tl_yaml_config.h"
-#include "tl_widgets/tl_utils.h"
 #include "tl_widgets/tl_tool_bar.h"
 #include "tl_widgets/tl_file_dialog.h"
 #include "tl_widgets/tl_brightness.h"

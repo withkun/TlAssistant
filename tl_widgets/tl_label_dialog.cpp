@@ -1,7 +1,7 @@
 #include "tl_label_dialog.h"
-#include "tl_utils.h"
 #include "spdlog/spdlog.h"
 #include "common/format_qt.h"
+#include "common/utilities.h"
 
 #include <QKeyEvent>
 #include <QCompleter>

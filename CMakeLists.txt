@@ -58,6 +58,8 @@ set(TL_COMMONS
     common/format_qt.h
     common/image_enhance.h
     common/image_enhance.cpp
+    common/utilities.h
+    common/utilities.cpp
     common/natsort.h
     common/natsort.cpp
     common/numpy_utils.h
@@ -82,8 +84,6 @@ set(TL_SOURCES
     tl_widgets/tl_label_file.cpp
     tl_widgets/tl_tool_bar.h
     tl_widgets/tl_tool_bar.cpp
-    tl_widgets/tl_utils.h
-    tl_widgets/tl_utils.cpp
     tl_widgets/tl_shape.h
     tl_widgets/tl_shape.cpp
     tl_widgets/tl_file_dialog.h

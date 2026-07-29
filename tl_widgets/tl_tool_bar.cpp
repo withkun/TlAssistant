@@ -1,6 +1,6 @@
 #include "tl_tool_bar.h"
 
-#include "tl_utils.h"
+#include "utilities.h"
 
 #include <QLayout>
 #include <QToolButton>

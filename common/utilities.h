@@ -1,5 +1,5 @@
-#ifndef __INC_UTILS_H
-#define __INC_UTILS_H
+#ifndef __INC_UTILITIES_H
+#define __INC_UTILITIES_H
 
 #include <QToolBar>
 #include <QValidator>
@@ -74,4 +74,4 @@ class utils {
     static QList<QString> natsorted(const QList<QString> &images);
     static std::vector<std::string> natsorted(const std::vector<std::string> &images);
 };
-#endif //__INC_UTILS_H
+#endif //__INC_UTILITIES_H
