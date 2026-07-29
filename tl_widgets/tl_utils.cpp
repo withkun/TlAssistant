@@ -1,6 +1,8 @@
 #include "tl_utils.h"
 
-#include "base64.h"
+#include "common/base64.h"
+#include "opencv2/geometry/2d.hpp"
+
 #include <fstream>
 #include <filesystem>
 
@@ -8,6 +10,27 @@
 #include <QBuffer>
 #include <QCryptographicHash>
 
+
+std::vector<QColor> label_colormap() {
+    std::vector<QColor> colormap(256);
+    for (int i = 0; i < 256; ++i) {
+        // 提取标签i的8个二进制位
+        const uint8_t b0 = (i >> 0) & 1;
+        const uint8_t b1 = (i >> 1) & 1;
+        const uint8_t b2 = (i >> 2) & 1;
+        const uint8_t b3 = (i >> 3) & 1;
+        const uint8_t b4 = (i >> 4) & 1;
+        const uint8_t b5 = (i >> 5) & 1;
+        const uint8_t b6 = (i >> 6) & 1;
+        const uint8_t b7 = (i >> 7) & 1;
+        // 合成RGB通道色彩值.
+        const uint8_t r = (b0 << 7) | (b3 << 6) | (b6 << 5);
+        const uint8_t g = (b1 << 7) | (b4 << 6) | (b7 << 5);
+        const uint8_t b = (b2 << 7) | (b5 << 6);
+        colormap[i] = QColor(r, g, b);
+    }
+    return colormap;
+}
 
 QIcon utils::newIcon(const QString &icon) {
     const QString icons_dir(":/icons/" + icon + ".png");

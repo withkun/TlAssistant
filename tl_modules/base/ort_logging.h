@@ -2,8 +2,9 @@
 #define __INC_ORT_LOGGING_H
 
 #include "spdlog/spdlog.h"
+#include "common/format_cv.h"
 #include "onnxruntime_cxx_api.h"
-#include "format_cv.h"
+
 
 namespace std {
 template <>

@@ -1,5 +1,5 @@
 #include "shape_to_json.h"
-#include "base64.h"
+#include "common/base64.h"
 
 #include <QBuffer>
 

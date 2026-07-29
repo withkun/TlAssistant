@@ -52,15 +52,22 @@ find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core Widgets Graphs QuickContr
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Widgets Graphs QuickControls2)
 find_package(Qt6 REQUIRED COMPONENTS LinguistTools)
 
+set(TL_COMMONS
+    common/base64.h
+    common/format_cv.h
+    common/format_qt.h
+    common/image_enhance.h
+    common/image_enhance.cpp
+    common/natsort.h
+    common/natsort.cpp
+    common/numpy_utils.h
+)
+
 set(TL_SOURCES
     config/app_config.h
     config/app_config.cpp
     config/tl_yaml_config.h
     config/tl_yaml_config.cpp
-    tl_widgets/base64.h
-    tl_widgets/numpy_utils.h
-    tl_widgets/image_enhance.h
-    tl_widgets/image_enhance.cpp
     tl_widgets/shape_to_json.h
     tl_widgets/shape_to_json.cpp
     tl_widgets/status_stats.h
@@ -109,8 +116,6 @@ set(AI_SOURCES
     tl_modules/base/sam_base.cpp
     tl_modules/base/ort_logging.h
     tl_modules/base/ort_logging.cpp
-    tl_modules/base/format_cv.h
-    tl_modules/base/format_qt.h
 
     tl_modules/sam1/tl_model_sam1.h
     tl_modules/sam1/tl_model_sam1.cpp
@@ -155,6 +160,7 @@ set(PROJECT_SOURCES
 qt_add_executable(${PROJECT_NAME} WIN32
     MANUAL_FINALIZATION
 
+    ${TL_COMMONS}
     ${TL_SOURCES}
     ${AI_SOURCES}
 
@@ -172,6 +178,7 @@ qt_add_translations(${PROJECT_NAME} TS_FILES
 
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/common
     ${CMAKE_CURRENT_SOURCE_DIR}/tl_modules
     ${CMAKE_CURRENT_SOURCE_DIR}/tl_widgets
     ${CUDA_SDK_ROOT_DIR}/include

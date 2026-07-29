@@ -4,9 +4,10 @@
 #include <QToolBar>
 #include <QValidator>
 
-#include "base/format_cv.h"
-#include "base/format_qt.h"
+#include "common/format_cv.h"
+#include "common/format_qt.h"
 #include "onnxruntime_cxx_api.h"
+
 
 extern void toFile(const std::string &name, const Ort::Value &tensor);
 extern void fromFile(const std::string &path, const cv::Mat &blob);
@@ -29,6 +30,8 @@ std::ostream &operator<<(std::ostream &os, const std::vector<T> &v) {
     os << "]";
     return os;
 }
+
+std::vector<QColor> label_colormap();
 
 using QKey = std::set<QString>;
 

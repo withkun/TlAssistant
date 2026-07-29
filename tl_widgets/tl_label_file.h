@@ -18,12 +18,11 @@ public:
 
 class OSError : public std::exception {
 public:
-    OSError() {};
 };
 
 class LabelFileError : public std::exception {
 public:
-    LabelFileError() {};
+    // Base for read/write failures of labelme JSON annotation files.
 };
 
 class LabelFile : public QObject {

@@ -3,28 +3,28 @@
 #include <random>
 #include <ranges>
 
-#include <QFileDialog>
-#include <QListWidget>
-#include <QLabel>
-#include <QLineEdit>
+#include <QApplication>
+#include <QWidgetAction>
 #include <QFormLayout>
 #include <QDockWidget>
+#include <QFileDialog>
+#include <QListWidget>
 #include <QAction>
 #include <QMenuBar>
 #include <QScrollBar>
 #include <QStatusBar>
 #include <QToolButton>
+#include <QLineEdit>
+#include <QLabel>
 #include <QMouseEvent>
-#include <QWidgetAction>
 #include <QMessageBox>
-#include <QMimeData>
 #include <QImageReader>
 #include <QDirIterator>
-#include <QTimer>
-#include <QApplication>
 #include <QPixmapCache>
 #include <QStyleHints>
+#include <QMimeData>
 
+#include "common/natsort.h"
 #include "config/app_config.h"
 #include "config/tl_yaml_config.h"
 #include "tl_widgets/tl_utils.h"
@@ -37,28 +37,7 @@
 #include "tl_modules/polygon_from_mask.h"
 
 
-std::vector<QColor> label_colormap() {
-    std::vector<QColor> colormap(256);
-    for (int i = 0; i < 256; ++i) {
-        // 提取标签i的8个二进制位
-        const uint8_t b0 = (i >> 0) & 1;
-        const uint8_t b1 = (i >> 1) & 1;
-        const uint8_t b2 = (i >> 2) & 1;
-        const uint8_t b3 = (i >> 3) & 1;
-        const uint8_t b4 = (i >> 4) & 1;
-        const uint8_t b5 = (i >> 5) & 1;
-        const uint8_t b6 = (i >> 6) & 1;
-        const uint8_t b7 = (i >> 7) & 1;
-        // 合成RGB通道色彩值.
-        const uint8_t r = (b0 << 7) | (b3 << 6) | (b6 << 5);
-        const uint8_t g = (b1 << 7) | (b4 << 6) | (b7 << 5);
-        const uint8_t b = (b2 << 7) | (b5 << 6);
-        colormap[i] = QColor(r, g, b);
-    }
-    return colormap;
-}
 const static std::vector<QColor> LABEL_COLORMAP = label_colormap();
-
 
 const QList<QString> TextToAnnotationCreateMode { "polygon", "rectangle" };
 
@@ -2723,8 +2702,14 @@ QStringList MainWindow::scan_image_files(const QString &root_dir) const {
     }
 
     SPDLOG_DEBUG("found {} images in {}", images.size(), root_dir);
-
-    // return natsort.os_sorted(images)
+    return natsort::os_sorted(images);
+    //try:
+    //    return natsort.os_sorted(images)
+    //except OSError:
+    //    logger.warning(
+    //        "natsort.os_sorted failed (known macOS strxfrm bug), "
+    //        "falling back to locale-unaware natural sort"
+    //    )
     return utils::natsorted(images);
 }
 

@@ -24,6 +24,7 @@
 #include "tl_modules/ai_text_to_annotation.h"
 #include "yaml-cpp/yaml.h"
 
+
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
 QT_END_NAMESPACE
@@ -208,7 +209,6 @@ private:
     void mark_dirty();
     void mark_clean();
     void update_action_states(bool value=true);
-    //void queueEvent(function);
     void show_status_message(const QString &message, int32_t delay=5000);
     void submit_ai_prompt();
     void reset_state();

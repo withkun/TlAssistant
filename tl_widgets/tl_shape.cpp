@@ -1,9 +1,9 @@
 #include "tl_shape.h"
 
-#include "base64.h"
-#include "numpy_utils.h"
+#include "common/base64.h"
+#include "common/format_qt.h"
+#include "common/numpy_utils.h"
 #include "spdlog/spdlog.h"
-#include "base/format_qt.h"
 
 #include <QPainter>
 #include <QPainterPath>

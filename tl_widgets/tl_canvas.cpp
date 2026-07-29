@@ -1,8 +1,8 @@
 ﻿#include "tl_canvas.h"
 
-#include "base/format_qt.h"
+#include "common/format_qt.h"
+#include "common/numpy_utils.h"
 #include "config/app_config.h"
-#include "tl_widgets/numpy_utils.h"
 #include "tl_modules/polygon_from_mask.h"
 
 #include <QWheelEvent>

@@ -1,6 +1,6 @@
 #include "tl_label_file.h"
 
-#include "base64.h"
+#include "common/base64.h"
 #include "shape_to_json.h"
 #include "spdlog/spdlog.h"
 
@@ -77,7 +77,7 @@ ShapeDict load_shape_json_obj(const nlohmann::json &shape_json_obj) {
     //    flags = shape_json_obj["flags"]
     //}
 
-    std::string description = "";
+    std::string description;
     if (shape_json_obj.contains("description") && !shape_json_obj["description"].is_null()) {
         if (!shape_json_obj["description"].is_string()) {
             std::cerr << "[load shape json] description mast be string: " << shape_json_obj["label"] << std::endl;

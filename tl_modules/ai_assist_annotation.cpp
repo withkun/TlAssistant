@@ -2,7 +2,7 @@
 
 #include "info_button.h"
 #include "spdlog/spdlog.h"
-#include "base/format_qt.h"
+#include "common/format_qt.h"
 
 #include <QLabel>
 #include <QEvent>
