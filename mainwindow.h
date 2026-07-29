@@ -19,7 +19,6 @@
 #include "tl_widgets/tl_train_widget.h"
 #include "tl_widgets/status_stats.h"
 #include "tl_widgets/shape_clipboard.h"
-
 #include "tl_modules/ai_assist_annotation.h"
 #include "tl_modules/ai_text_to_annotation.h"
 #include "yaml-cpp/yaml.h"
@@ -29,6 +28,8 @@ QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
 QT_END_NAMESPACE
 
+#define _appname_                           tr("tl assistant")
+#define _version_                           "1.0.0.0"
 
 enum class ZoomMode : int32_t {
     FIT_WIDTH,
@@ -190,7 +191,7 @@ private:
     //QAction                                        *actTrain_{};
     //QAction                                        *actInfer_{};
     TlTrainWidget                                  *train_widget_{};
-    QProcess                                       *sub_process_;
+    QProcess                                       *sub_process_{};
 
     void retheme();
     Actions setup_actions();
@@ -214,8 +215,7 @@ private:
     void reset_state();
     QListWidgetItem *current_item();
     void undo_shape_edit();
-    void tutorial();
-    void about();
+    void tutorial() const;
     void on_drawing_polygon_changed(bool drawing=true);
     void switch_canvas_mode(bool edit, const QString &create_mode="");
     void highlight_ai_buttons(bool highlight);

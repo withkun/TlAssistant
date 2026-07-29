@@ -1,21 +1,19 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
+
 #include <random>
 #include <ranges>
 
 #include <QApplication>
-#include <QWidgetAction>
+#include <QDesktopServices>
 #include <QFormLayout>
 #include <QDockWidget>
 #include <QFileDialog>
 #include <QListWidget>
-#include <QAction>
 #include <QMenuBar>
 #include <QScrollBar>
 #include <QStatusBar>
 #include <QToolButton>
-#include <QLineEdit>
-#include <QLabel>
 #include <QMouseEvent>
 #include <QMessageBox>
 #include <QImageReader>
@@ -55,7 +53,7 @@ MainWindow::MainWindow(const QString &config_file,
                        const QString &output_dir)
     : QMainWindow(), ui_(new Ui::MainWindow), window_state_("tl_assistant", "tl_assistant") {
     ui_->setupUi(this);
-    this->setWindowTitle(tr("tl assistant"));
+    this->setWindowTitle(_appname_);
 
     AppConfig &appConfig = AppConfig::instance();
     this->config_file_ = this->load_config(config_file, config_overrides);
@@ -167,9 +165,26 @@ Actions MainWindow::setup_actions() {
     const auto shortcuts = [this](const std::string &key) { return YAML_KEYS(config_["shortcuts"][key]); };
 
     auto *about = action(
-        tr("&About"),
-        &MainWindow::about, {}, ":/icons/question.svg",
-        tr("Show about page"), false, true, false
+        "&About " + _appname_,
+        [this]() {
+            QMessageBox::about(
+                this,
+                "About " + _appname_,
+"<h3>" + _appname_ + "</h3>"
+"<p>Image Polygonal Annotation with C++</p>"
+"<p>Version: " + _version_ + "</p>"
+"<p>Author: Kentaro Wada</p>"
+"<p>"
+"    <a href=\"https://labelme.io\">Homepage</a> | "
+"    <a href=\"https://labelme.io/docs\">Documentation</a> | "
+"    <a href=\"https://labelme.io/docs/troubleshoot\">Troubleshooting</a>"
+"</p>"
+"<p>"
+"    <a href=\"https://github.com/wkentaro/labelme\">GitHub</a> | "
+"    <a href=\"https://x.com/labelmeai\">Twitter/X</a>"
+"</p>"
+            );
+        }
     );
     auto *save = action(
         tr("&Save\n"),
@@ -762,7 +777,7 @@ void MainWindow::setup_app_state(const QString &file_or_dir, const QString &outp
 }
 
 StatusBarWidgets MainWindow::setup_status_bar() {
-    auto *message = new QLabel(tr("%1 started.").arg(tr("tl assistant")));
+    auto *message = new QLabel(tr("%1 started.").arg(_appname_));
     auto *stats = new StatusStats();
     this->statusBar()->addWidget(message, 1);
     this->statusBar()->addWidget(stats, 0);
@@ -953,7 +968,7 @@ void MainWindow::populate_mode_actions() {
 
 QString MainWindow::get_window_title(bool dirty) {
     const auto *file_list = docks_.file_list_;
-    const auto file_index = file_list->currentItem() ? file_list->currentRow() : -1;
+    const auto file_index = file_list->currentItem() ? file_list->currentRow() : None;
     return format_window_title(
         image_path_,
         file_index,
@@ -1122,12 +1137,9 @@ void MainWindow::undo_shape_edit() {
     actions_.undo_->setEnabled(canvas_widgets_.canvas_->can_restore_shape());
 }
 
-void MainWindow::tutorial() {
-    //url = "https://github.com/labelmeai/labelme/tree/main/examples/tutorial"  # NOQA
-    //webbrowser.open(url)
-}
-
-void MainWindow::about() {
+void MainWindow::tutorial() const {
+    QString url("https://github.com/labelmeai/labelme/tree/main/examples/tutorial");
+    QDesktopServices::openUrl(url);
 }
 
 void MainWindow::on_drawing_polygon_changed(bool drawing) {
@@ -2125,7 +2137,7 @@ void MainWindow::open_file_with_dialog(bool value) {
     fileDialog.setFileMode(FileDialogPreview::ExistingFile);
     fileDialog.setNameFilter(filters);
     fileDialog.setWindowTitle(
-        tr("%1 - Choose Image or Label file").arg(tr("tl assistant"))
+        tr("%1 - Choose Image or Label file").arg(_appname_)
     );
     fileDialog.setWindowFilePath(path);
     fileDialog.setViewMode(FileDialogPreview::Detail);
@@ -2148,10 +2160,10 @@ void MainWindow::changeOutputDirDialog(bool _value) {
 
     auto output_dir = QFileDialog::getExistingDirectory(
         this,
-        tr("%1 - Save/Load Annotations in Directory").arg(tr("tl assistant")),
+        tr("%1 - Save/Load Annotations in Directory").arg(_appname_),
         default_output_dir,
-        QFileDialog::ShowDirsOnly |
-        QFileDialog::DontResolveSymlinks
+        QFileDialog::ShowDirsOnly
+        | QFileDialog::DontResolveSymlinks
     );
     //output_dir = str(output_dir)
 
@@ -2199,7 +2211,7 @@ void MainWindow::save_label_file(bool save_as) {
 
 QString MainWindow::saveFileDialog() {
     //assert self._image_path is not None
-    const QString caption = tr("%1 - Choose File").arg(tr("tl assistant"));
+    const QString caption = tr("%1 - Choose File").arg(_appname_);
     const QString filters = tr("Label files (*%1)").arg(LabelFile::suffix);
     auto dlg = QFileDialog(
         this,
@@ -2458,7 +2470,7 @@ void MainWindow::open_dir_with_dialog(bool value) {
     auto dir_path = QString(
         QFileDialog::getExistingDirectory(
             this,
-            tr("%1 - Open Directory").arg(tr("tl assistant")),
+            tr("%1 - Open Directory").arg(_appname_),
             defaultOpenDirPath,
             QFileDialog::ShowDirsOnly |
             QFileDialog::DontResolveSymlinks
@@ -2637,10 +2649,10 @@ QString MainWindow::format_window_title(
     const QImage &image,
     bool dirty
 ) {
-    QString title = tr("tl assistant");
+    QString title = _appname_;
     if (!image_path.isEmpty()) {
         title = QString("%1 - %2").arg(title, image_path);
-        if (file_count > 0 && file_index > -1)
+        if (file_count > 0 && file_index != None)
             title = QString("%1 [%2/%3]").arg(title).arg(file_index + 1).arg(file_count);
     }
     if (!this->image_.isNull())
