@@ -1,5 +1,5 @@
 #include "tl_brightness.h"
-#include "common/image_enhance.h"
+#include "image_enhance.h"
 
 #include <QLabel>
 #include <QHBoxLayout>

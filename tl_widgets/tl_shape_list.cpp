@@ -7,12 +7,32 @@
 #include <QAbstractTextDocumentLayout>
 
 
+QString format_label_with_color_dot(const QString &text, const std::vector<int32_t> &color) {
+    const int32_t r = color[0], g = color[1], b = color[2];
+    return QString("%1 <font color=\"#%2%3%4\">●</font>").arg(text.toHtmlEscaped())
+               .arg(r, 2, 16, '0').arg(g, 2, 16, '0').arg(b, 2, 16, '0');
+}
+
+QString format_shape_label(const TlShape &shape, const std::vector<int32_t> &fill_rgb) {
+    //assert shape.label is not None
+    QString text = shape.label_;
+    if (shape.group_id_ != None)
+        text += QString(" (%2)").arg(shape.group_id_);
+    //enabled_flags = [key for key, value in (shape.flags or {}).items() if value];
+    //if enabled_flags:
+    //    text += f" [{', '.join(enabled_flags)}]";
+    return format_label_with_color_dot(text, fill_rgb);
+}
 
 HTMLDelegate::HTMLDelegate(QObject *parent) : QStyledItemDelegate(parent) {
     doc_ = new QTextDocument(this);
 }
 
-void HTMLDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const {
+void HTMLDelegate::paint(
+    QPainter *painter,
+    const QStyleOptionViewItem &option,
+    const QModelIndex &index
+) const {
     painter->save();
 
     auto *options = new QStyleOptionViewItem(option);
@@ -164,11 +184,11 @@ QList<ShapeListItem *> ShapeListView::items() const {
 //}
 
 void ShapeListView::itemDroppedEvent() {
-    emit itemDropped();
+    emit item_dropped();
 }
 
 void ShapeListView::itemChangedEvent(QStandardItem *item) {
-    emit itemChanged(static_cast<ShapeListItem *>(item));
+    emit item_changed(static_cast<ShapeListItem *>(item));
 }
 
 void ShapeListView::itemSelectionChangedEvent(const QItemSelection &selected, const QItemSelection &deselect) {
@@ -176,14 +196,14 @@ void ShapeListView::itemSelectionChangedEvent(const QItemSelection &selected, co
     const QList<QModelIndex> sel_indexes = selected.indexes(), des_indexes = deselect.indexes();
     std::ranges::transform(sel_indexes, std::back_inserter(selected1), [this](const auto &idx) { return static_cast<ShapeListItem *>(this->model_->itemFromIndex(idx)); });
     std::ranges::transform(des_indexes, std::back_inserter(deselect1), [this](const auto &idx) { return static_cast<ShapeListItem *>(this->model_->itemFromIndex(idx)); });
-    emit itemSelectionChanged(selected1, deselect1);
+    emit item_selection_changed(selected1, deselect1);
 }
 
 void ShapeListView::itemDoubleClickedEvent(const QModelIndex &index) {
-    emit itemDoubleClicked(static_cast<ShapeListItem *>(this->model_->itemFromIndex(index)));
+    emit item_double_clicked(static_cast<ShapeListItem *>(this->model_->itemFromIndex(index)));
 }
 
-QList<ShapeListItem *> ShapeListView::selectedItems() {
+QList<ShapeListItem *> ShapeListView::selected_items() {
     //return [self.model().itemFromIndex(i) for i in self.selectedIndexes()]
     QList<ShapeListItem *> selected;
     const QList<QModelIndex> indexes = selectedIndexes();
@@ -191,11 +211,11 @@ QList<ShapeListItem *> ShapeListView::selectedItems() {
     return selected;
 }
 
-void ShapeListView::scrollToItem(ShapeListItem *item) {
+void ShapeListView::scroll_to_item(ShapeListItem *item) {
     this->scrollTo(this->model_->indexFromItem(item));
 }
 
-void ShapeListView::addItem(ShapeListItem *item) {
+void ShapeListView::add_item(ShapeListItem *item) {
     if (item == nullptr) {
         throw std::invalid_argument("item must be LabelListWidgetItem");
     }
@@ -205,17 +225,17 @@ void ShapeListView::addItem(ShapeListItem *item) {
 
 void ShapeListView::removeItem(ShapeListItem *item) {
     const auto index = this->model_->indexFromItem(item);
-    this->model_->removeRows(index.row(), 1);
+    this->model_->removeRows(index.row(), 1, QModelIndex());
 }
 
-void ShapeListView::selectItem(ShapeListItem *item) {
+void ShapeListView::select_item(ShapeListItem *item) {
     const auto index = this->model_->indexFromItem(item);
     selectionModel()->select(index, QItemSelectionModel::Select);
 }
 
-ShapeListItem *ShapeListView::findItemByShape(const TlShape &shape) {
+ShapeListItem *ShapeListView::find_item_by_shape(const TlShape &shape) {
     for (auto row = 0; row < this->model_->rowCount(); ++row) {
-        auto *const item = static_cast<ShapeListItem *>(this->model_->item(row, 0));
+        auto *const item = dynamic_cast<ShapeListItem *>(this->model_->item(row, 0));
         if (item->shape() == shape) {
             return item;
         }

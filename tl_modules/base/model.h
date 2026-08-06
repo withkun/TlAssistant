@@ -3,7 +3,7 @@
 
 #include "blob.h"
 #include "types.h"
-#include "utilities.h"
+#include "qt_utils.h"
 
 
 struct InferenceSession {

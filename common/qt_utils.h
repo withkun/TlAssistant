@@ -1,5 +1,5 @@
-#ifndef __INC_UTILITIES_H
-#define __INC_UTILITIES_H
+#ifndef __INC_QT_UTILS_H
+#define __INC_QT_UTILS_H
 
 #include <QToolBar>
 #include <QValidator>
@@ -31,6 +31,13 @@ std::ostream &operator<<(std::ostream &os, const std::vector<T> &v) {
     return os;
 }
 
+inline bool operator<(const QPointF &a, const QPointF &b) {
+    if (a.x() < b.x()) {
+        return true;
+    }
+    return a.y() < b.y();
+}
+
 std::vector<QColor> label_colormap();
 
 using QKey = std::set<QString>;
@@ -42,15 +49,21 @@ class utils {
     static QValidator *labelValidator();
 
     static QString fmtShortcut(const QList<QString> &text);
+    static QString format_shortcut(const QString &text);
 
-    static QAction *newAction(const QString &text, const QList<QString> &shortcut={}, const QString &file="", const QString &tip="", bool checkable=false, bool enabled=true, bool checked=false);
+    static double  direction_angle(const QPointF &start, const QPointF &end);
+    static QPointF project_point_on_line(QPointF point, QPointF line_start, QPointF line_end);
+    static QPointF project_point_on_perpendicular_line(QPointF point, QPointF line_start, QPointF line_end);
 
-    static void addActions(QMenu *menu, const std::list<QObject *> &actions);
+    static QAction *newAction(const QString &text, const QList<QString> &shortcut={}, const QString &file="", const QString &tip="", bool enabled=true, bool checkable=false, bool checked=false);
+
+    static void add_actions(QMenu *menu, const std::list<QObject *> &actions);
     static void addActions(QToolBar *tool, const std::list<QAction *> &actions);
 
     static qreal distance(const QPointF &p);
     static qreal distance(const QPointF &p1, const QPointF &p2);
     static qreal distanceToLine(const QPointF &point, const QLineF &line);
+    static QList<qreal> distance(const QList<QPointF> &points);
 
     static QString HashPixmap(const QPixmap &pixmap);
 
@@ -67,11 +80,5 @@ class utils {
     static QByteArray img_arr_to_data(const cv::Mat &img_data);
 
     static cv::Mat img_b64_to_arr(const std::string &b64_string);
-
-    static bool compareNat(const std::string &a, const std::string &b);
-    static bool compareFilename(const std::string &a, const std::string &b);
-
-    static QList<QString> natsorted(const QList<QString> &images);
-    static std::vector<std::string> natsorted(const std::vector<std::string> &images);
 };
-#endif //__INC_UTILITIES_H
+#endif //__INC_QT_UTILS_H

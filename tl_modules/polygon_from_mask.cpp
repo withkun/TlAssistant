@@ -1,5 +1,5 @@
 #include "polygon_from_mask.h"
-#include "common/numpy_utils.h"
+#include "common/np_utils.h"
 
 #include <stack>
 

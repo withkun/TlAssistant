@@ -2,7 +2,7 @@
 
 #include "common/base64.h"
 #include "common/format_qt.h"
-#include "common/numpy_utils.h"
+#include "common/np_utils.h"
 #include "spdlog/spdlog.h"
 
 #include <QPainter>
@@ -11,7 +11,8 @@
 #include <QUuid>
 
 
-QSet<QString> ShapeType{
+namespace {
+const QSet<QString> ShapeType{
     "polygon",
     "rectangle",
     "oriented_rectangle",
@@ -23,7 +24,62 @@ QSet<QString> ShapeType{
     "mask",
 };
 
-QSet<QString> POLYLINE_SHAPE_TYPES{ "polygon", "linestrip" };
+const QSet<QString> POLYLINE_SHAPE_TYPES{ "polygon", "linestrip" };
+}
+
+
+void Shape::post_init() {
+    if (!ShapeType.contains(this->shape_type_))
+        throw std::invalid_argument("Unexpected shape_type: " + this->shape_type_.toStdString());
+    //self.points = np.asarray(self.points, dtype=np.float64).reshape(-1, 2)
+    //self.point_labels = np.asarray(self.point_labels, dtype=np.int_).reshape(-1)
+    if (this->point_labels_.empty() && !this->points_.empty())
+        this->point_labels_.resize(this->points_.size(), 1);
+}
+
+bool Shape::can_add_point() const {
+    return POLYLINE_SHAPE_TYPES.contains(shape_type_);
+}
+
+void Shape::insert_point(int32_t i, const QPointF &point, int32_t label) {
+    this->points_.insert(i, point);
+    this->point_labels_.insert(i, label);
+}
+
+bool Shape::can_remove_point() const {
+    if (!this->can_add_point())
+        return false;
+    if (this->shape_type_ == "polygon" && this->points_.size() <= 3)
+        return false;
+    if (this->shape_type_ == "linestrip" && this->points_.size() <= 2)
+        return false;
+    return true;
+}
+
+void Shape::remove_point(int32_t i) {
+    if (!this->can_remove_point()) {
+        SPDLOG_WARN(
+            "Cannot remove point from: shape_type={}, len(points)={}",
+            this->shape_type_,
+            this->points_.size()
+        );
+        return;
+    }
+    this->points_.remove(i);
+    this->point_labels_.remove(i);
+}
+
+void Shape::move_vertex(int32_t i, const QPointF &pos) {
+    this->points_[i] = pos;
+}
+
+void Shape::translate(const QPointF &offset) {
+    std::ranges::for_each(this->points_, [&](auto &p) { p += offset; });
+}
+
+Shape Shape::copy() const {
+    return *this;
+}
 
 
 // 类变量  ->  成员变量
@@ -49,10 +105,12 @@ TlShape::TlShape(const QString &label,
                  const QMap<QString, bool> &flags,
                  int32_t group_id,
                  const QString &description,
-                 const cv::Mat &mask) {
+                 const cv::Mat &mask,
+                 const QList<QPointF> &points,
+                 const bool closed) {
     this->label_                      = label;
     this->group_id_                   = group_id;
-    this->points_                     = {};
+    this->points_                     = points;
     this->point_labels_               = {};
     this->shape_type                  (shape_type);
     this->shape_raw_                  ;
@@ -73,7 +131,7 @@ TlShape::TlShape(const QString &label,
         { MOVE_VERTEX, P_SQUARE }
     };
 
-    this->closed_                     = false;
+    this->closed_                     = closed;
 
     // Per-instance line color override (used for the pending line).
     this->line_color_                 = line_color;
@@ -85,6 +143,57 @@ TlShape::TlShape(const QString &label,
     this->current_vertex_fill_color_  = TlShape::current_vertex_fill_color;
 
     this->uuid_                       = QUuid::createUuid().toString();
+}
+
+TlShape::TlShape(const QString &shape_type, const QList<QPointF> &points, const QList<int32_t> &point_labels, bool closed) {
+    this->shape_type                  (shape_type);
+    this->points_                     = points;
+    this->point_labels_               = point_labels;
+    this->closed_                     = closed;
+}
+
+bool TlShape::can_add_point() const {
+    return POLYLINE_SHAPE_TYPES.contains(shape_type_);
+}
+
+void TlShape::insert_point(int32_t i, const QPointF &point, int32_t label) {
+    this->points_.insert(i, point);
+    this->point_labels_.insert(i, label);
+}
+
+bool TlShape::can_remove_point() const {
+    if (!this->can_add_point())
+        return false;
+    if (this->shape_type_ == "polygon" && this->points_.size() <= 3)
+        return false;
+    if (this->shape_type_ == "linestrip" && this->points_.size() <= 2)
+        return false;
+    return true;
+}
+
+void TlShape::remove_point(int32_t i) {
+    if (!this->can_remove_point()) {
+        SPDLOG_WARN(
+            "Cannot remove point from: shape_type={}, len(points)={}",
+            this->shape_type_,
+            this->points_.size()
+        );
+        return;
+    }
+    this->points_.remove(i);
+    this->point_labels_.remove(i);
+}
+
+void TlShape::move_vertex(int32_t i, QPointF pos) {
+    this->points_[i] = pos;
+}
+
+void TlShape::translate(QPointF offset) {
+    std::ranges::for_each(this->points_, [&](auto &p) { p += offset; });
+}
+
+TlShape TlShape::copy() const {
+    return *this;
 }
 
 QPointF TlShape::scale_point(const QPointF &point) const {
@@ -157,42 +266,7 @@ QPointF TlShape::popPoint() {
         this->points_.pop_back();
         return p;
     }
-    return QPointF();
-}
-
-void TlShape::insertPoint(int32_t i, const QPointF &point, int32_t label) {
-    this->points_.insert(i, point);
-    this->point_labels_.insert(i, label);
-}
-
-bool TlShape::canRemovePoint() const {
-    if (!this->canAddPoint()) {
-        return false;
-    }
-
-    if (this->shape_type_ == "polygon" && this->points_.size() <= 3) {
-        return false;
-    }
-
-    if (this->shape_type_ == "linestrip" && this->points_.size() <= 2) {
-        return false;
-    }
-
-    return true;
-}
-
-void TlShape::removePoint(int32_t i) {
-    if (!this->canRemovePoint()) {
-        SPDLOG_WARN(
-            "Cannot remove point from: shape_type={}, len(points)={}",
-            this->shape_type_,
-            this->points_.size()
-        );
-        return;
-    }
-
-    this->points_.remove(i);
-    this->point_labels_.remove(i);
+    return {};
 }
 
 bool TlShape::isClosed() const {
@@ -455,19 +529,10 @@ void TlShape::highlightClear() {
     highlightIndex_ = None;
 }
 
-TlShape TlShape::copy() const {
-    return *this;
-}
-
 int32_t TlShape::size() const {
     return static_cast<int32_t>(points_.size());
 }
 
-//def __getitem__(self, key):
-//    return self.points[key]
-
-//def __setitem__(self, key, value):
-//    self.points[key] = value
 
 QString TlShape::key() const {
     return this->uuid_;
@@ -551,4 +616,151 @@ bool TlShape::operator<(const TlShape &shape) const {
 
 TlShape::operator bool() const {
     return !points_.empty();
+}
+
+
+int32_t nearest_index_within_epsilon(
+    QList<double> distances, float epsilon
+) {
+    //auto nearest = int(np.argmin(distances));
+    //if (distances[nearest] > epsilon)
+    //    return None;
+    //return nearest;
+    return {};
+}
+
+int32_t nearest_vertex_index(
+    const TlShape &shape,
+    const QPointF &point,
+    const float scale,
+    const float epsilon
+) {
+    QList<QPointF> points;
+    if (QKey{"mask", "point"}.contains(shape.shape_type_) || shape.points_.empty())
+        return None;
+    std::ranges::for_each(shape.points_, [&](const QPointF &p) { points.push_back((p - point) * scale); });
+    const auto distances = utils::distance(points);
+    return nearest_index_within_epsilon(distances, epsilon);
+}
+
+int32_t nearest_edge_index(
+    const TlShape &shape,
+    const QPointF &point,
+    float scale,
+    float epsilon
+) {
+    if (shape.points_.empty())
+        return None;
+    //const auto scaled_point = point * scale;
+    //const auto scaled_points = shape.points_ * scale;
+    //const auto starts = np.roll(scaled_points, 1, axis=0);
+    //const auto segments = scaled_points - starts;
+    //const auto length_squared = (segments * segments).sum(axis=1);
+    //t = np.clip(
+    //    ((scaled_point - starts) * segments).sum(axis=1)
+    //    / np.where(length_squared == 0, 1.0, length_squared),
+    //    0.0,
+    //    1.0,
+    //);
+    //auto projections = starts + t[:, None] * segments;
+    //auto distances = np.linalg.norm(scaled_point - projections, axis=1);
+    //return nearest_index_within_epsilon(distances, epsilon);
+    return {};
+}
+
+int32_t nearest_rotation_point_index(
+    const TlShape &shape,
+    const QPointF &point,
+    float scale,
+    float epsilon
+) {
+    if (shape.shape_type_ != "oriented_rectangle" || shape.points_.size() != 4)
+        return None;
+    //auto handles = (shape.points + np.roll(shape.points, 1, axis=0)) / 2;
+    //auto distances = np.linalg.norm((handles - point) * scale, axis=1);
+    //return nearest_index_within_epsilon(distances, epsilon);
+    return {};
+}
+
+QPointF get_rotation_handle(const TlShape &shape, int32_t index) {
+    //if shape.shape_type != "oriented_rectangle" or len(shape.points) != 4:
+    //    raise ValueError(
+    //        "Rotation handles are only defined for 4-point oriented rectangles, "
+    //        f"got shape_type={shape.shape_type!r}, len(points)={len(shape.points)}"
+    //    )
+    //return (shape.points[index] + shape.points[index - 1]) / 2
+    return {};
+}
+
+QPointF oriented_rectangle_center(const TlShape &shape) {
+    //if shape.shape_type != "oriented_rectangle":
+    //    raise ValueError(
+    //        f"Center is only defined for oriented rectangles, got {shape.shape_type!r}"
+    //    )
+    //if len(shape.points) != 4:
+    //    raise ValueError(
+    //        f"Oriented rectangle center requires 4 points, got {len(shape.points)}"
+    //    )
+    //return (shape.points[0] + shape.points[2]) / 2
+    return {};
+}
+
+const float _ARROW_HEAD_BACK_OFFSET = 0.22f;
+const float _ARROW_HALF_LENGTH = 5.0f;
+//_ORIENTED_RECTANGLE_ARROW_TEMPLATE: Final[npt.NDArray[np.float64]] = (
+//    np.array(
+//        [
+//            [_ARROW_HEAD_BACK_OFFSET, -0.5],
+//            [1.0, 0.0],
+//            [_ARROW_HEAD_BACK_OFFSET, 0.5],
+//            [-1.0, 0.0],
+//        ]
+//    )
+//    * _ARROW_HALF_LENGTH
+//)
+
+
+QList<QPointF> oriented_rectangle_arrow_points(const TlShape &shape) {
+    //center = oriented_rectangle_center(shape=shape)
+    //direction = shape.points[1] - shape.points[0]
+    //angle = float(np.arctan2(direction[1], direction[0]))
+    //return (
+    //    _rotate_points_around_origin(
+    //        points=_ORIENTED_RECTANGLE_ARROW_TEMPLATE, angle=angle
+    //    )
+    //    + center
+    //)
+    return {};
+}
+
+void rotate(
+    TlShape &shape,
+    const QPointF &center,
+    const float angle,
+    const QList<QPointF> &source_points
+) {
+    if (shape.shape_type_ != "oriented_rectangle")
+        throw std::invalid_argument(
+            "Shape rotation is only supported for oriented rectangles, "
+            "got " + shape.shape_type_.toStdString()
+        );
+    auto points = source_points.empty() ? shape.points_ : source_points;
+    if (points.size() != 4 || shape.points_.size() != 4)
+        throw std::invalid_argument(
+            std::format("Shape rotation requires 4 points, got "
+                        "len(source_points)={}, len(shape.points)={}", points.size(), shape.points_.size())
+        );
+    //auto rotated = rotate_points_around_origin(points - center, angle) + center;
+    //shape.points_ = rotated;
+}
+
+QList<QPointF> rotate_points_around_origin(
+    QList<QPointF> points,
+    float angle
+) {
+    //auto cos_a = std::cos(angle);
+    //auto sin_a = std::sin(angle);
+    //rotation = np.array([[cos_a, -sin_a], [sin_a, cos_a]])
+    //return points @ rotation.T
+    return {};
 }

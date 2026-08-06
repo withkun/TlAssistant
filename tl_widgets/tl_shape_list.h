@@ -10,6 +10,10 @@
 
 #include "tl_shape.h"
 
+
+QString format_label_with_color_dot(const QString &text, const std::vector<int32_t> &color);
+QString format_shape_label(const TlShape &shape, const std::vector<int32_t> &fill_rgb);
+
 class HTMLDelegate: public QStyledItemDelegate {
 public:
     explicit HTMLDelegate(QObject *parent = nullptr);
@@ -38,7 +42,7 @@ private:
 class ShapeItemModel : public QStandardItemModel {
     Q_OBJECT
 public:
-    bool removeRows(int row, int count, const QModelIndex &parent = QModelIndex()) override;
+    bool removeRows(int row, int count, const QModelIndex &parent) override;
     bool dropMimeData(const QMimeData *data, Qt::DropAction action, int row, int column, const QModelIndex &parent) override;
 
 signals:
@@ -54,10 +58,10 @@ public:
     explicit ShapeListView(QWidget *parent = nullptr);
 
 signals:
-    void itemDropped();
-    void itemChanged(ShapeListItem *item);
-    void itemDoubleClicked(ShapeListItem *item);
-    void itemSelectionChanged(const QList<ShapeListItem *> &selected, const QList<ShapeListItem *> &deselect);
+    void item_dropped();
+    void item_changed(ShapeListItem *item);
+    void item_double_clicked(ShapeListItem *item);
+    void item_selection_changed(const QList<ShapeListItem *> &selected, const QList<ShapeListItem *> &deselect);
 
 public slots:
 
@@ -75,12 +79,12 @@ public:
     void itemChangedEvent(QStandardItem *item);
     void itemSelectionChangedEvent(const QItemSelection &selected, const QItemSelection &deselect);
     void itemDoubleClickedEvent(const QModelIndex &index);
-    QList<ShapeListItem *> selectedItems();
-    void scrollToItem(ShapeListItem *item);
-    void addItem(ShapeListItem *item);
+    QList<ShapeListItem *> selected_items();
+    void scroll_to_item(ShapeListItem *item);
+    void add_item(ShapeListItem *item);
     void removeItem(ShapeListItem *item);
-    void selectItem(ShapeListItem *item);
-    ShapeListItem *findItemByShape(const TlShape &shape);
+    void select_item(ShapeListItem *item);
+    ShapeListItem *find_item_by_shape(const TlShape &shape);
     void clear();
 
     bool empty() const;

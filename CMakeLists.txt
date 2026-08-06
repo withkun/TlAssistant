@@ -54,15 +54,17 @@ find_package(Qt6 REQUIRED COMPONENTS LinguistTools)
 
 set(TL_COMMONS
     common/base64.h
+    common/base64.cpp
     common/format_cv.h
     common/format_qt.h
     common/image_enhance.h
     common/image_enhance.cpp
-    common/utilities.h
-    common/utilities.cpp
     common/natsort.h
     common/natsort.cpp
-    common/numpy_utils.h
+    common/np_utils.h
+    common/np_utils.cpp
+    common/qt_utils.h
+    common/qt_utils.cpp
 )
 
 set(TL_SOURCES
@@ -70,6 +72,14 @@ set(TL_SOURCES
     config/app_config.cpp
     config/tl_yaml_config.h
     config/tl_yaml_config.cpp
+    tl_widgets/canvas_interaction.h
+    tl_widgets/canvas_interaction.cpp
+    tl_widgets/shape_clipboard.h
+    tl_widgets/shape_clipboard.cpp
+    tl_widgets/shape_render.h
+    tl_widgets/shape_render.cpp
+    tl_widgets/zoom_widget.h
+    tl_widgets/zoom_widget.cpp
     tl_widgets/shape_to_json.h
     tl_widgets/shape_to_json.cpp
     tl_widgets/status_stats.h
@@ -97,12 +107,6 @@ set(TL_SOURCES
     tl_widgets/tl_train_widget.h
     tl_widgets/tl_train_widget.ui
     tl_widgets/tl_train_widget.cpp
-    tl_widgets/zoom_widget.h
-    tl_widgets/zoom_widget.cpp
-    tl_widgets/shape_clipboard.h
-    tl_widgets/shape_clipboard.cpp
-    tl_widgets/shape_render.h
-    tl_widgets/shape_render.cpp
 )
 
 set(AI_SOURCES

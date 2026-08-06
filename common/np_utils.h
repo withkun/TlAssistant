@@ -1,5 +1,5 @@
-#ifndef __INC_NUMPY_UTILS_H
-#define __INC_NUMPY_UTILS_H
+#ifndef __INC_NP_UTILS_H
+#define __INC_NP_UTILS_H
 
 #include <vector>
 #include <algorithm>
@@ -74,4 +74,4 @@ T ptp_max(const std::vector<cv::Point_<T>> &coords) {
 }
 
 } //namespace np
-#endif //__INC_NUMPY_UTILS_H
+#endif //__INC_NP_UTILS_H

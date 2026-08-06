@@ -1,7 +1,7 @@
 #ifndef __INC_LABEL_DIALOG_H
 #define __INC_LABEL_DIALOG_H
 
-#include "utilities.h"
+#include "qt_utils.h"
 
 #include <QDialog>
 #include <QLineEdit>
@@ -39,10 +39,10 @@ public:
     bool                                sort_labels_;
     QDialogButtonBox                   *buttonBox_{nullptr};
     LabelLineEdit                      *edit_{nullptr};
-    QTextEdit                          *editDescription_{nullptr};
+    QTextEdit                          *edit_description_{nullptr};
     QLineEdit                          *edit_group_id_{nullptr};
     QVBoxLayout                        *flagsLayout_{nullptr};
-    QListWidget                        *labelList_{nullptr};
+    QListWidget                        *label_list_{nullptr};
 
     void validate();
     QString get_stripped_text();
@@ -50,13 +50,13 @@ public:
     void labelDoubleClicked(QListWidgetItem *item);
     void updateFlags(QString label_new);
     void postProcess();
-    void addLabelHistory(const QString &label);
+    void add_label_history(const QString &label);
     void deleteFlags();
     void resetFlags(QString label="");
     void setFlags(QMap<QString, bool> &flags);
     QMap<QString, bool> getFlags();
     int32_t getGroupId();
     std::tuple<QString, QMap<QString, bool>, int32_t, QString>
-    popUp(QString text="", QMap<QString, bool> flags={}, int32_t group_id=None, QString description="", bool flags_disabled=false, bool move=true);
+    popUp(QString text, QPoint position=QPoint(), QMap<QString, bool> flags={}, int32_t group_id=None, QString description="", bool flags_disabled=false, bool move=true);
 };
 #endif //__INC_LABEL_DIALOG_H

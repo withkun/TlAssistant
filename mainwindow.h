@@ -5,12 +5,10 @@
 #include <QWidgetAction>
 #include <QGraphicsScene>
 #include <QProgressDialog>
-#include <QScrollArea>
 #include <QSettings>
 #include <QProcess>
 
 #include "tl_widgets/tl_canvas.h"
-#include "tl_widgets/tl_tool_bar.h"
 #include "tl_widgets/tl_shape_list.h"
 #include "tl_widgets/tl_label_list.h"
 #include "tl_widgets/tl_label_file.h"
@@ -107,7 +105,7 @@ struct Actions {
     QAction                                *toggle_all_{};                              // QtGui.QAction
     QAction                                *open_dir_{};                                // QtGui.QAction
     QWidgetAction                          *zoom_widget_action_{};                      // QtWidgets.QWidgetAction
-    std::list<QPair<QString, QAction *>>    draw_;                                      // list[tuple[str, QtGui.QAction]]
+    QList<QPair<QString, QAction *>>        draw_;                                      // list[tuple[str, QtGui.QAction]]
     std::list<QAction *>                    zoom_;                                      // tuple[ZoomWidget | QtGui.QAction, ...]
     std::list<QAction *>                    on_load_active_;                            // tuple[QtGui.QAction, ...]
     std::list<QAction *>                    on_shapes_present_;                         // tuple[QtGui.QAction, ...]
@@ -141,6 +139,7 @@ protected:
 
 private:
     Ui::MainWindow                                 *ui_{};
+    MainWindow                                     &self;
 
     QString                                         config_file_;
     YAML::Node                                      config_;
@@ -156,7 +155,6 @@ private:
     ShapeClipboard                                 *shape_clipboard_{};
     LabelDialog                                    *label_dialog_{};
 
-    QScrollArea                                    *scroll_area_{};
     QMap<Qt::Orientation, QMap<QString, int32_t>>   scroll_values_;
 
     ZoomMode                                        zoom_mode_{ZoomMode::FIT_WINDOW};
@@ -168,22 +166,20 @@ private:
 
     QMap<QString, std::pair<ZoomMode, float>>       zoom_values_;
     QMap<QString, std::pair<int32_t, int32_t>>      brightness_contrast_values_;
-    QMap<ZoomMode, std::function<float()>>          scalers_;
 
     QImage                                          image_;
+    AnnotationEx                                    annotation_;
     QString                                         image_path_;
     QString                                         prev_image_path_;
     QByteArray                                      imageData_;
     QByteArray                                      other_data_;
-    std::unique_ptr<LabelFile>                      label_file_;
+    std::unique_ptr<LabelFile>                      label_file_path_;
 
     std::string                                     sam_model_name_{"efficientsam:latest"};
     std::unique_ptr<SamSession>                     text_osam_session_{};
 
-    AiAssistAnnotation                             *ai_assist_annotation_widget_{};
-    AiTextToAnnotation                             *ai_text_to_annotation_widget_{};
-    QWidgetAction                                  *select_ai_model_{};
-    QWidgetAction                                  *ai_prompt_action_{};
+    AiAssistAnnotation                             *ai_assist_annotation_{};
+    AiTextToAnnotation                             *ai_text_to_annotation_{};
     QProgressDialog                                *progress_dialog_{};
     bool                                            ai_buttons_highlighted_{false};
 
@@ -201,7 +197,6 @@ private:
     StatusBarWidgets setup_status_bar();
     CanvasWidgets setup_canvas();
     DockWidgets setup_dock_widgets();
-
     QString load_config(QString config_file, const YAML::Node &config_overrides);
     QMenu *menu(const QString &title, const std::list<QObject *> &actions={});
     bool has_no_shapes() const;
@@ -213,7 +208,6 @@ private:
     void show_status_message(const QString &message, int32_t delay=5000);
     void submit_ai_prompt();
     void reset_state();
-    QListWidgetItem *current_item();
     void undo_shape_edit();
     void tutorial() const;
     void on_drawing_polygon_changed(bool drawing=true);
@@ -224,79 +218,99 @@ private:
     void edit_label(bool value=false);
     void on_file_search_changed();
     void file_list_item_selection_changed();
-    void shapeSelectionChanged(const QList<int32_t> &selected_shapes);
-    void addLabel(TlShape &shape);
-    void update_shape_color(TlShape &shape);
-    std::vector<int32_t> get_rgb_by_label(const QString &label, LabelList *label_list);
-    void remLabels(const QList<TlShape> &shapes);
+    void on_shape_selection_changed(const QList<int32_t> &selected_shapes);
+    void add_label(TlShape &shape);
+    std::vector<int32_t> get_rgb_by_label(const QString &label, LabelList *unique_label_list);
+    void remove_labels(const QList<TlShape> &shapes);
     void load_shapes(QList<TlShape> &shapes, bool replace=true);
-    void load_shape_dicts(const QList<ShapeDict> &shapes);
     void load_flags(const YAML::Node &flags, QListWidget *widget) const;
-    bool saveLabels(const QString &filename);
-    void duplicateSelectedShape();
-    void pasteSelectedShape();
-    void copySelectedShape();
+    bool save_labels(const QString &label_path);
+    void insert_shapes(const QList<TlShape> &shapes);
     void label_selection_changed();
-    void labelItemChanged(const ShapeListItem *item);
-    void labelOrderChanged();
-    void newShape();
-    void scrollRequest(int32_t delta, Qt::Orientation orientation);
-    void setScroll(Qt::Orientation orientation, float value);
+    void on_label_item_changed(const ShapeListItem *item);
+    void on_label_order_changed();
+    void on_new_shape();
+    void on_inference_produced_no_shapes();
+    void on_inference_failed(const QString &message);
+    void on_scroll_request(int32_t delta, Qt::Orientation orientation);
+    void on_pan_request(const QPoint &step);
+    void set_scroll_value(Qt::Orientation orientation, float value);
     void set_zoom(int32_t value, QPointF pos=QPointF());
     void set_zoom_to_original();
-    void add_zoom(float increment=1.1, QPointF pos=QPointF());
-    void zoom_requested(int32_t delta, QPointF pos);
-    void setFitWindow(bool value=true);
-    void setFitWidth(bool value=true);
-    void enableKeepPrevScale(bool enabled);
-    void onNewBrightnessContrast(const QImage &image);
-    void brightnessContrast(bool value=false, bool is_initial_load=false);
-    void toggleShapes(int32_t value);
-    QString get_label_path(QString image_or_label_path);
-    void load_file(QString image_or_label_path);
+    void add_zoom(float increment=1.1, const QPointF &pos=QPointF());
+    void zoom_requested(int32_t delta, const QPointF &pos);
+    void set_fit_window_mode(bool value=true);
+    void set_fit_width_mode(bool value=true);
+    void switch_zoom_mode(ZoomMode mode);
+    void sync_zoom_mode_actions();
+    void on_brightness_contrast_changed(const QImage &image);
+    void open_brightness_contrast_dialog(bool value=false, bool is_initial_load=false);
+    void toggle_shape_visibility(int32_t value);
+    AnnotationEx open_label_file_into_state(const QString &label_path);
+    bool open_image_into_state(const QString &image_path);
+    void load_file(const QString &image_or_label_path);
+    //def resizeEvent(self, a0: QtGui.QResizeEvent) -> None:
     void paint_canvas();
     void adjust_scale();
-    float scaleFitWindow() const;
-    float scaleFitWidth() const;
-    void enableSaveImageWithData(bool enabled);
+    float fit_window_scale() const;
+    float fit_width_scale() const;
+    void set_save_image_with_data(bool enabled);
     void reset_layout();
+    //def closeEvent(self, a0: QtGui.QCloseEvent) -> None:
+    //def dragEnterEvent(self, a0: QtGui.QDragEnterEvent) -> None:
+    //def dropEvent(self, a0: QtGui.QDropEvent) -> None:
     void open_prev_image(bool value=false);
     void open_next_image(bool value=false);
     void open_file_with_dialog(bool value=false);
-    void changeOutputDirDialog(bool value=false);
+    void prompt_output_dir(bool value=false);
     void save_label_file(bool save_as=false);
-    QString saveFileDialog();
-    void closeFile(bool value=false);
-    QString getLabelFile();
-    void deleteFile();
+    QString prompt_save_file_path();
+    void close_file(bool value=false);
+    QString current_label_file_path();
+    bool confirm_deletion(const QString &message);
+    void delete_file();
+    bool is_settings_editable();
     LabelDialog *make_label_dialog();
+    bool on_setting_changed(const QString &key_path, QObject value);
+    void apply_to_live_widgets(const QString &key_path);
+    QMap<QString, bool> read_flag_dock_states();
+    void open_settings();
     void open_config_file();
-    bool hasLabels();
     bool has_label_file();
     bool can_continue();
-    void errorMessage(const QString &title, const QString &message);
-    QString currentPath();
-    void toggleKeepPrevMode();
-    void removeSelectedPoint();
-    void deleteSelectedShape();
+    void show_error_message(const QString &title, const QString &message);
+    void show_file_open_error(const QString &path, const QString &file_kind, const QString &exc, const QString &extra);
+    QString current_path();
+    void remove_selected_point();
+    void delete_selected_shapes();
     void copy_shape();
     void move_shape();
     void load_from_file_or_dir(const QString &file_or_dir);
     void open_dir_with_dialog(bool value=false);
-    QStringList imageList();
-    void importDroppedImageFiles(const QStringList &imageFiles);
+    QStringList image_list() const;
+    void import_dropped_image_files(const QStringList &image_files);
     void import_images_from_dir(const QString &root_dir, const QString &pattern="");
     void update_status_stats(const QPointF &mouse_pos);
-    //QList<TlShape> shapes_from_dicts(shape_dicts: list[ShapeDict], label_flags: dict[str, list[str]] | None,);
-    QString resolve_text_annotation_shape_type(const QString &create_mode, const QString &ai_output_format);
-    //def _rgb_from_colormap_id(*, label_id: int)
-    //void rgb_from_label_colors(label: str, label_colors: dict[str, list[int]] | None);
-    bool is_valid_label(const QString &label, const QStringList &existing_labels, const QString &policy);
-    QString format_window_title(const QString &image_path, int32_t file_index, int32_t file_count, const QImage &image, bool dirty);
-    //QString resolve_label_path(image_or_label_path: str, output_dir: Path | None);
-    //QListWidgetItem *make_image_list_item(image_path: str, output_dir: Path | None);
-    //ShapeDict shape_to_dict(shape: Shape);
-    QStringList scan_image_files(const QString &root_dir) const;
+
+    static QList<TlShape> shapes_from_dicts(const QList<ShapeDict> &shape_dicts, const QMap<QString, QList<QString>> &label_flags);
+    static QString resolve_text_annotation_shape_type(const QString &create_mode, const QString &ai_output_format);
+    static std::vector<int32_t> rgb_from_colormap_id(int32_t label_id);
+    static std::vector<int32_t> rgb_from_label_colors(const std::string &label, const std::map<std::string, std::vector<int32_t>> &label_colors);
+    static bool is_valid_label(const QString &label, const QStringList &existing_labels, const QString &policy);
+    static QString format_window_title(const QString &image_path, int32_t file_index, int32_t file_count, const QImage &image, bool dirty);
+    static QString resolve_label_path(const QString &image_or_label_path, const QString &output_dir="");
+    static QListWidgetItem *make_image_list_item(const QString &image_path, const QString &output_dir);
+    static ShapeDict shape_to_dict(const TlShape &shape);
+    static QStringList scan_image_files(const QString &root_dir);
+
+
+    QListWidgetItem *current_item();
+    void update_shape_color(TlShape &shape);
+    void enableKeepPrevScale(bool enabled);
+    void load_shape_dicts(const QList<ShapeDict> &shapes);
+    void duplicateSelectedShape();
+    void copySelectedShape();
+
 
 private slots:
     void slotTaskSubmit();

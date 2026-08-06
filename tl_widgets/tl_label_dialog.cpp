@@ -1,7 +1,7 @@
 #include "tl_label_dialog.h"
 #include "spdlog/spdlog.h"
 #include "common/format_qt.h"
-#include "common/utilities.h"
+#include "common/qt_utils.h"
 
 #include <QKeyEvent>
 #include <QCompleter>
@@ -68,27 +68,27 @@ LabelDialog::LabelDialog(QWidget *parent,
     QObject::connect(buttonBox_, &QDialogButtonBox::rejected, this, &LabelDialog::reject);
     layout->addWidget(buttonBox_);
     // label_list
-    labelList_ = new QListWidget;
+    label_list_ = new QListWidget;
     if (fit_to_content_["row"]) {
-        labelList_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        label_list_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     }
     if (fit_to_content_["column"]) {
-        labelList_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        label_list_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     }
     sort_labels_ = sort_labels;
     if (!labels.isEmpty()) {
-        labelList_->addItems(labels);
+        label_list_->addItems(labels);
     }
     if (sort_labels) {
-        labelList_->sortItems();
+        label_list_->sortItems();
     } else {
-        labelList_->setDragDropMode(QAbstractItemView::InternalMove);
+        label_list_->setDragDropMode(QAbstractItemView::InternalMove);
     }
-    QObject::connect(labelList_, &QListWidget::currentItemChanged, this, &LabelDialog::labelSelected);
-    QObject::connect(labelList_, &QListWidget::itemDoubleClicked, this, &LabelDialog::labelDoubleClicked);
-    labelList_->setFixedHeight(150);
-    edit_->setListWidget(labelList_);
-    layout->addWidget(labelList_);
+    QObject::connect(label_list_, &QListWidget::currentItemChanged, this, &LabelDialog::labelSelected);
+    QObject::connect(label_list_, &QListWidget::itemDoubleClicked, this, &LabelDialog::labelDoubleClicked);
+    label_list_->setFixedHeight(150);
+    edit_->setListWidget(label_list_);
+    layout->addWidget(label_list_);
     //label_flags
     //if (flags.isEmpty())
     //    flags = {};
@@ -98,10 +98,10 @@ LabelDialog::LabelDialog(QWidget *parent,
     layout->addItem(flagsLayout_);
     QObject::connect(edit_, &LabelLineEdit::textChanged, this, &LabelDialog::updateFlags);
     // text edit
-    editDescription_ = new QTextEdit;
-    editDescription_->setPlaceholderText("Label description");
-    editDescription_->setFixedHeight(50);
-    layout->addWidget(editDescription_);
+    edit_description_ = new QTextEdit;
+    edit_description_->setPlaceholderText("Label description");
+    edit_description_->setFixedHeight(50);
+    layout->addWidget(edit_description_);
     setLayout(layout);
     // completion
     auto *completer = new QCompleter;  // 自动补全
@@ -115,17 +115,17 @@ LabelDialog::LabelDialog(QWidget *parent,
     } else {
         throw std::invalid_argument("Unsupported completion: " + completion.toStdString());
     }
-    completer->setModel(labelList_->model());
+    completer->setModel(label_list_->model());
     edit_->setCompleter(completer);
 }
 
-void LabelDialog::addLabelHistory(const QString &label) {
-    if (!labelList_->findItems(label, Qt::MatchExactly).isEmpty()) {
+void LabelDialog::add_label_history(const QString &label) {
+    if (!label_list_->findItems(label, Qt::MatchExactly).isEmpty()) {
         return;
     }
-    labelList_->addItem(label);
+    label_list_->addItem(label);
     if (sort_labels_) {
-        labelList_->sortItems();
+        label_list_->sortItems();
     }
 }
 
@@ -229,18 +229,19 @@ int32_t LabelDialog::getGroupId() {
 std::tuple<QString, QMap<QString, bool>, int32_t, QString> LabelDialog::
 popUp(
     QString text,
+    QPoint position,
     QMap<QString, bool> flags,
     int32_t group_id,
     QString description,
     bool flags_disabled,
     bool move) {
     if (fit_to_content_["row"]) {
-        labelList_->setMinimumHeight(
-            labelList_->sizeHintForRow(0) * labelList_->count() + 2
+        label_list_->setMinimumHeight(
+            label_list_->sizeHintForRow(0) * label_list_->count() + 2
         );
     }
     if (fit_to_content_["column"]) {
-        labelList_->setMinimumWidth(labelList_->sizeHintForColumn(0) + 2);
+        label_list_->setMinimumWidth(label_list_->sizeHintForColumn(0) + 2);
     }
     // if text is None, the previous label in self.edit is kept
     if (text.isEmpty()) {
@@ -250,7 +251,7 @@ popUp(
     if (description.isEmpty()) {
         description = "";
     }
-    editDescription_->setPlainText(description);
+    edit_description_->setPlainText(description);
     if (!flags.isEmpty()) {
         setFlags(flags);
     } else {
@@ -268,13 +269,13 @@ popUp(
     } else {
         edit_group_id_->setText(QString::number(group_id));
     }
-    auto items = labelList_->findItems(text, Qt::MatchFixedString);
+    auto items = label_list_->findItems(text, Qt::MatchFixedString);
     if (!items.isEmpty()) {
         if (items.length() != 1) {
             SPDLOG_WARN("Label list has duplicate: " + text);
         }
-        labelList_->setCurrentItem(items[0]);
-        auto row = labelList_->row(items[0]);
+        label_list_->setCurrentItem(items[0]);
+        auto row = label_list_->row(items[0]);
         edit_->completer()->setCurrentRow(row);
     }
     edit_->setFocus(Qt::PopupFocusReason);
@@ -286,7 +287,7 @@ popUp(
             edit_->text(),
             getFlags(),
             getGroupId(),
-            editDescription_->toPlainText()
+            edit_description_->toPlainText()
         );
     } else {
         return std::make_tuple(QString(""), QMap<QString, bool>{}, None, QString(""));

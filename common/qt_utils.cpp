@@ -1,4 +1,4 @@
-#include "utilities.h"
+#include "qt_utils.h"
 
 #include "common/base64.h"
 #include "opencv2/geometry/2d.hpp"
@@ -37,15 +37,7 @@ QIcon utils::newIcon(const QString &icon) {
     return QIcon(icons_dir);
 }
 
-QString utils::fmtShortcut(const QList<QString> &text) {
-    if (text.empty()) { return ""; }
-    auto slist = text[0].split("+");
-    if (slist.size() < 2) { return text[0]; }
-    QString mod = slist[0], key = slist[1];
-    return QString("<b>%1</b>+<b>%2</b>").arg(mod, key);
-}
-
-QAction *utils::newAction(const QString &text, const QList<QString> &shortcut, const QString &file, const QString &tip, bool checkable, bool enabled, bool checked) {
+QAction *utils::newAction(const QString &text, const QList<QString> &shortcut, const QString &file, const QString &tip, const bool enabled, const bool checkable, const bool checked) {
     auto *a = new QAction(text);
     const QIcon icon(file);
     if (!icon.isNull()) {
@@ -74,7 +66,7 @@ QAction *utils::newAction(const QString &text, const QList<QString> &shortcut, c
     return a;
 };
 
-void utils::addActions(QMenu *menu, const std::list<QObject *> &actions) {
+void utils::add_actions(QMenu *menu, const std::list<QObject *> &actions) {
     for (auto *a : actions) {
         if (a == nullptr) {
             menu->addSeparator();
@@ -97,7 +89,70 @@ void utils::addActions(QToolBar *tool, const std::list<QAction *> &actions) {
 }
 
 QValidator *utils::labelValidator() {
+    // Accepts strings of 2+ chars not starting with space or tab.
+    // Single non-whitespace char is Intermediate (handled by regex partial match).
     return new QRegularExpressionValidator(QRegularExpression("^[^ \t].+"));
+}
+
+QString utils::fmtShortcut(const QList<QString> &text) {
+    if (text.empty()) { return ""; }
+    auto slist = text[0].split("+");
+    if (slist.size() < 2) { return text[0]; }
+    QString mod = slist[0], key = slist[1];
+    return QString("<b>%1</b>+<b>%2</b>").arg(mod, key);
+}
+
+QString utils::format_shortcut(const QString &text) {
+    if (!text.contains("+"))
+        throw std::invalid_argument("Not a modifier-plus-key shortcut: " + text.toStdString());
+    const auto idx = text.indexOf("+");
+    const auto modifier = text.left(idx);
+    const auto key = text.mid(idx+1);
+    return QString("<b>%1</b>+<b>%2</b>").arg(modifier, key);
+}
+
+double utils::direction_angle(const QPointF &start, const QPointF &end) {
+    // 2. 计算差值: delta = end - start
+    double dx = end.x() - start.x();
+    double dy = end.y() - start.y();
+    // 3. 计算 atan2(dy, dx)
+    return std::atan2(dy, dx);
+}
+
+QPointF utils::project_point_on_line(
+    QPointF point,
+    QPointF line_start,
+    QPointF line_end
+) {
+    const auto dx = line_end.x() - line_start.x();
+    const auto dy = line_end.y() - line_start.y();
+    const auto length_sq = dx * dx + dy * dy;
+    if (length_sq == 0.0)
+        return point;
+    const auto t = (
+        (point.x() - line_start.x()) * dx + (point.y() - line_start.y()) * dy
+    ) / length_sq;
+    return {line_start.x() + t * dx, line_start.y() + t * dy};
+}
+
+QPointF utils::project_point_on_perpendicular_line(
+    QPointF point,
+    QPointF line_start,
+    QPointF line_end
+) {
+    // The perpendicular line passes through line_end and is orthogonal to
+    // the vector (line_end - line_start).
+    const auto dx = line_end.x() - line_start.x();
+    const auto dy = line_end.y() - line_start.y();
+    const auto length_sq = dx * dx + dy * dy;
+    if (length_sq == 0.0)
+        return point;
+    // Direction of the perpendicular: (-dy, dx) (rotate 90 degrees).
+    // Project point onto the line through line_end with direction (-dy, dx).
+    const auto px = point.x() - line_end.x();
+    const auto py = point.y() - line_end.y();
+    const auto t = (px * (-dy) + py * dx) / length_sq;
+    return {line_end.x() + t * (-dy), line_end.y() + t * dx};
 }
 
 // 向量点积
@@ -233,6 +288,12 @@ qreal utils::distanceToLine(const QPointF &point, const QLineF &line) {
     //if np.linalg.norm(p2 - p1) == 0:
     //    return np.linalg.norm(p3 - p1);
     //return np.linalg.norm(np.cross(p2 - p1, p1 - p3)) / np.linalg.norm(p2 - p1);
+}
+
+QList<qreal> utils::distance(const QList<QPointF> &points) {
+    QList<qreal> distances;
+    std::ranges::for_each(points, [&](const QPointF &p) { distances.append(distance(p)); });
+    return distances;
 }
 
 QString utils::HashPixmap(const QPixmap &pixmap) {
@@ -411,67 +472,4 @@ void fromFile(const std::string &path, std::vector<float> &blob) {
     const std::streamsize model_size = ifs.tellg();
     ifs.seekg(0, std::ifstream::beg);
     ifs.read(reinterpret_cast<char *>(blob.data()), model_size);
-}
-
-// 字符串自然排序
-bool utils::compareNat(const std::string &a, const std::string &b) {
-    if (a.empty())
-        return true;
-    if (b.empty())
-        return false;
-    if (std::isdigit(a[0]) && !std::isdigit(b[0]))
-        return true;
-    if (!std::isdigit(a[0]) && std::isdigit(b[0]))
-        return false;
-    if (!std::isdigit(a[0]) && !std::isdigit(b[0])) {
-        if (std::toupper(a[0]) == std::toupper(b[0]))
-            return compareNat(a.substr(1), b.substr(1));
-        return (std::toupper(a[0]) == std::toupper(b[0]));
-    }
-
-    // Both strings begin with digit --> parse both numbers
-    std::istringstream issa(a);
-    std::istringstream issb(b);
-    int ia, ib;
-    issa >> ia;
-    issb >> ib;
-    if (ia != ib)
-        return ia < ib;
-
-    // Numbers are the same --> remove numbers and recurse
-    std::string anew, bnew;
-    std::getline(issa, anew);
-    std::getline(issb, bnew);
-    return compareNat(anew, bnew);
-}
-
-bool utils::compareFilename(const std::string &a, const std::string &b) {
-    std::filesystem::path fsa(a);
-    const auto suffix_a = fsa.extension().string();      // 包含.的后缀, 如: .json
-    const auto filename_a = fsa.replace_extension().string();
-
-    std::filesystem::path fsb(b);
-    const auto suffix_b = fsb.extension().string();      // 包含.的后缀, 如: .json
-    const auto filename_b = fsb.replace_extension().string();
-
-    if (filename_a != filename_b) {
-        return compareNat(filename_a, filename_b);
-    }
-    return compareNat(suffix_a, suffix_b);
-}
-
-QList<QString> utils::natsorted(const QList<QString> &images) {
-    std::vector<std::string> files;
-    std::ranges::for_each(images, [&files](const auto &s) { files.push_back(s.toStdString()); });
-    std::stable_sort(files.begin(), files.end(), compareFilename);
-
-    QList<QString> result;
-    std::ranges::for_each(files, [&result](const std::string &s) { result.push_back(QString::fromStdString(s)); });
-    return result;
-}
-
-std::vector<std::string> utils::natsorted(const std::vector<std::string> &images) {
-    std::vector<std::string> files = images;
-    std::stable_sort(files.begin(), files.end(), compareFilename);
-    return files;
 }

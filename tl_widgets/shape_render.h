@@ -1,33 +1,22 @@
 #ifndef __INC_SHAPE_RENDER_H
 #define __INC_SHAPE_RENDER_H
 
-#include <QPainterPath>
 #include "tl_shape.h"
+#include "qt_utils.h"
+#include <QPainterPath>
 
 
 //@dataclasses.dataclass(frozen=True)
 class VertexHighlight {
 public:
-    int32_t     index;
-    QString     mode;                   // Literal["move", "near"]
+    int32_t     index_{None};
+    QString     mode_;                   // Literal["move", "near"]
 
-    //@property
-    float size_factor() const {
-        return QMap<QString, float>{
-            {"move", 1.5f},
-            {"near", 4.0f}}[mode];
-    }
+    float size_factor() const;
+    QString point_type() const;
 
-    //@property
-    QString point_type() const {        //-> Literal["square", "round"]:
-        if (mode == "move") {
-            return "square";
-        }
-        if (mode == "near") {
-            return "round";
-        }
-        //  typing.assert_never(self.mode);
-        return mode;
+    explicit operator bool() const {
+        return index_ != None && !mode_.isEmpty();
     }
 };
 
@@ -42,17 +31,10 @@ public:
     QColor hvertex_fill_;
 
     //@classmethod
-    static Palette from_rgb(const std::vector<int32_t> &rgb) {
-        int32_t r = rgb[0], g = rgb[1], b = rgb[2];
-        Palette p;
-        p.line_           = QColor(r, g, b);
-        p.fill_           = QColor(r, g, b, 128);
-        p.select_line_    = QColor(255, 255, 255);
-        p.select_fill_    = QColor(r, g, b, 155);
-        p.vertex_fill_    = QColor(r, g, b);
-        p.hvertex_fill_   = QColor(255, 255, 255);
-        return p;
-    }
+    static Palette from_rgb(const std::vector<int32_t> &rgb);
+
+    explicit operator bool() const;
+    bool empty() const;
 };
 
 //@dataclasses.dataclass(frozen=True)
@@ -69,6 +51,43 @@ public:
     bool                show_label_{false};
 };
 
-QPainterPath build_image_path(TlShape shape);
+//@dataclasses.dataclass(frozen=True)
+class ShapePaths {
+public:
+    QPainterPath        line_;
+    QPainterPath        vertices_;
+    QPainterPath        negative_vertices_;
+    QPainterPath        rotation_vertices_;
+    QPainterPath        orientation_arrow_;
+};
+
+
+void render_shape(QPainter &painter, const TlShape &shape, const ShapeRenderContext &context);
+
+void paint_shape_label(QPainter &painter, const TlShape &shape, const ShapeRenderContext &context);
+
+void paint_shape_mask(QPainter &painter, const TlShape &shape, const ShapeRenderContext &context);
+
+void paint_shape_points(QPainter &painter, const TlShape &shape, const ShapeRenderContext &context);
+
+void paint_filled_vertices(QPainter &painter, const QPainterPath &path, bool highlighted, const Palette &palette);
+
+std::pair<float, QString> resolve_vertex_style(const VertexHighlight &highlight, int32_t vertex_index, int32_t default_size, const QString &default_point_type);
+
+void build_shape_point_path(QPainterPath &path, const TlShape &shape, const ShapeRenderContext &context, int32_t vertex_index);
+
+void build_shape_rotation_point_path(QPainterPath &path, const TlShape &shape, const ShapeRenderContext &context, int32_t vertex_index);
+
+void draw_vertex(QPainterPath &path, const QPointF &pos, float size, const QString &point_type);
+
+void build_shape_oriented_rectangle_arrow_path(QPainterPath &path, const TlShape &shape, float scale);
+
+ShapePaths build_shape_points_paths(const TlShape &shape, const ShapeRenderContext &context);
+
+bool is_hit_by_point(const TlShape &shape, const QPointF &point, float scale, int32_t point_size, float epsilon);
+
+QRectF shape_bounds(const TlShape &shape);
+
+QPainterPath build_image_path(const TlShape &shape);
 
 #endif //__INC_SHAPE_RENDER_H

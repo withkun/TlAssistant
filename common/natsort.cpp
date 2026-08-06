@@ -71,7 +71,7 @@ std::vector<T> natsort::os_sorted(std::vector<T> &seq, const bool reverse) {
     return seq;
 }
 
-QStringList natsort::os_sorted(QStringList &images, bool reverse) {
+QList<QString> natsort::os_sorted(QStringList &images, bool reverse) {
     std::vector<QString> seq;
     seq.insert(seq.end(), images.begin(), images.end());
     os_sorted(seq, reverse);
@@ -79,4 +79,68 @@ QStringList natsort::os_sorted(QStringList &images, bool reverse) {
     images.clear();
     std::ranges::for_each(seq, [&images](const QString &s) { images.push_back(s); });
     return images;
+}
+
+
+// 字符串自然排序
+bool natsort::compareNat(const std::string &a, const std::string &b) {
+    if (a.empty())
+        return true;
+    if (b.empty())
+        return false;
+    if (std::isdigit(a[0]) && !std::isdigit(b[0]))
+        return true;
+    if (!std::isdigit(a[0]) && std::isdigit(b[0]))
+        return false;
+    if (!std::isdigit(a[0]) && !std::isdigit(b[0])) {
+        if (std::toupper(a[0]) == std::toupper(b[0]))
+            return compareNat(a.substr(1), b.substr(1));
+        return (std::toupper(a[0]) == std::toupper(b[0]));
+    }
+
+    // Both strings begin with digit --> parse both numbers
+    std::istringstream issa(a);
+    std::istringstream issb(b);
+    int ia, ib;
+    issa >> ia;
+    issb >> ib;
+    if (ia != ib)
+        return ia < ib;
+
+    // Numbers are the same --> remove numbers and recurse
+    std::string anew, bnew;
+    std::getline(issa, anew);
+    std::getline(issb, bnew);
+    return compareNat(anew, bnew);
+}
+
+bool natsort::compareFilename(const std::string &a, const std::string &b) {
+    std::filesystem::path fsa(a);
+    const auto suffix_a = fsa.extension().string();      // 包含.的后缀, 如: .json
+    const auto filename_a = fsa.replace_extension().string();
+
+    std::filesystem::path fsb(b);
+    const auto suffix_b = fsb.extension().string();      // 包含.的后缀, 如: .json
+    const auto filename_b = fsb.replace_extension().string();
+
+    if (filename_a != filename_b) {
+        return compareNat(filename_a, filename_b);
+    }
+    return compareNat(suffix_a, suffix_b);
+}
+
+QList<QString> natsort::natsorted(const QList<QString> &images) {
+    std::vector<std::string> files;
+    std::ranges::for_each(images, [&files](const auto &s) { files.push_back(s.toStdString()); });
+    std::stable_sort(files.begin(), files.end(), compareFilename);
+
+    QList<QString> result;
+    std::ranges::for_each(files, [&result](const std::string &s) { result.push_back(QString::fromStdString(s)); });
+    return result;
+}
+
+std::vector<std::string> natsort::natsorted(const std::vector<std::string> &images) {
+    std::vector<std::string> files = images;
+    std::stable_sort(files.begin(), files.end(), compareFilename);
+    return files;
 }

@@ -1,13 +1,40 @@
 #ifndef __INC_SHAPE_H
 #define __INC_SHAPE_H
 
-#include "utilities.h"
+#include "qt_utils.h"
 
 #include <QObject>
 #include <QPointF>
 #include <QRect>
 #include <QColor>
 #include <QMap>
+
+
+class Shape {
+public:
+    QString                     label_;
+    int32_t                     group_id_{-1};
+    QString                     shape_type_{"polygon"};
+    QMap<QString, bool>         flags_;
+    QString                     description_;
+    cv::Mat                     mask_;
+    QList<QPointF>              points_;
+    QList<int32_t>              point_labels_;
+    QMap<QString, QByteArray>   other_data_;
+    bool                        closed_{false};
+    bool                        visible_{true};
+
+
+    void post_init();
+
+    bool can_add_point() const;
+    void insert_point(int32_t i, const QPointF &point, int32_t label);
+    bool can_remove_point() const;
+    void remove_point(int32_t i);
+    void move_vertex(int32_t i, const QPointF &pos);
+    void translate(const QPointF &offset);
+    Shape copy() const;
+};
 
 
 class TlShape : public QObject {
@@ -19,7 +46,11 @@ public:
             const QMap<QString, bool> &flags={},
             int32_t group_id=None,
             const QString &description="",
-            const cv::Mat &mask=cv::Mat());
+            const cv::Mat &mask=cv::Mat(),
+            const QList<QPointF> &points={},
+            bool closed=false);
+
+    TlShape(const QString &shape_type, const QList<QPointF> &points, const QList<int32_t> &point_labels, bool closed);
 
 public:   // 类变量:
     // Render handles as squares
@@ -63,14 +94,16 @@ public:
     QString                     label_;
     int32_t                     group_id_{None};
     QList<QPointF>              points_;
+    QList<int32_t>              point_labels_;
     QString                     shape_type_;
     QMap<QString, bool>         flags_;
     QString                     description_;
     cv::Mat                     mask_;
     QMap<QString, QString>      other_data_;
+    bool                        closed_{false};
+    bool                        visible_{true};
 
 private:
-    QList<int32_t>              point_labels_;
     std::tuple<QString, QList<QPointF>, QList<int32_t>> shape_raw_;
     bool                        points_raw_{false};
     bool                        shape_type_raw_{false};
@@ -82,23 +115,24 @@ private:
     std::map<int32_t, float>    highlight_sizes_;
     std::map<int32_t, int32_t>  highlight_shapes_;
 
-    bool                        closed_{false};
-
     QString                     uuid_;
 
 public:
     QPointF scale_point(const QPointF &point) const;
     void setShapeRefined(const QString &shape_type, const QList<QPointF> &points, const QList<int32_t> &point_labels, const cv::Mat &mask=cv::Mat());
     void restoreShapeRaw();
-    [[nodiscard]] QString shape_type() const;
+    QString shape_type() const;
     void shape_type(QString value);
     void close();
     void addPoint(const QPointF &point, int32_t label=1);
     bool canAddPoint() const;
     QPointF popPoint();
-    void insertPoint(int32_t i, const QPointF &point, int32_t label=1);
-    bool canRemovePoint() const;
-    void removePoint(int32_t i);
+    bool can_add_point() const;
+    void insert_point(int32_t i, const QPointF &point, int32_t label=1);
+    bool can_remove_point() const;
+    void remove_point(int32_t i);
+    void move_vertex(int32_t i, QPointF pos);
+    void translate(QPointF offset);
     bool isClosed() const;
     void setOpen();
     void paint(QPainter &painter);
@@ -106,21 +140,21 @@ public:
     int32_t nearestVertex(QPointF point, float epsilon) const;
     int32_t nearestEdge(QPointF point, float epsilon) const;
     bool containsPoint(QPointF point);
-    [[nodiscard]] QPainterPath makePath() const;
-    [[nodiscard]] QRectF boundingRect() const;
+    QPainterPath makePath() const;
+    QRectF boundingRect() const;
     void moveBy(const QPointF &offset);
     void moveVertex(int32_t i, const QPointF &pos);
     void highlightVertex(int32_t i, int32_t action);
     void highlightClear();
-    [[nodiscard]] TlShape copy() const;
+    TlShape copy() const;
 
-    [[nodiscard]] QString key() const;
+    QString key() const;
 
     TlShape(const TlShape &shape);
     void SetValue(const TlShape &shape);
 
-    [[nodiscard]] TlShape clone() const;
-    [[nodiscard]] int32_t size() const;
+    TlShape clone() const;
+    int32_t size() const;
     void clear();
 
     QPointF &operator[](int32_t index);
@@ -131,4 +165,24 @@ public:
     bool operator<(const TlShape &shape) const;
     explicit operator bool() const;
 };
+
+
+int32_t nearest_index_within_epsilon(QList<double> distances, float epsilon);
+
+int32_t nearest_vertex_index(const TlShape &shape, const QPointF &point, float scale, float epsilon);
+
+int32_t nearest_edge_index(const TlShape &shape, const QPointF &point, float scale, float epsilon);
+
+int32_t nearest_rotation_point_index(const TlShape &shape, const QPointF &point, float scale, float epsilon);
+
+QPointF get_rotation_handle(const TlShape &shape, int32_t index);
+
+QPointF oriented_rectangle_center(const TlShape &shape);
+
+QList<QPointF> oriented_rectangle_arrow_points(const TlShape &shape);
+
+void rotate(TlShape &shape, const QPointF &center, float angle, const QList<QPointF> &source_points);
+
+QList<QPointF> rotate_points_around_origin(QList<QPointF> points, float angle);
+
 #endif //__INC_SHAPE_H
