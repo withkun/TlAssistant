@@ -126,7 +126,7 @@ MainWindow::MainWindow(const QString &config_file,
     // the new palette is applied, so connect queued: _retheme runs on the next
     // event loop pass, against the live palette.
     QObject::connect(QGuiApplication::styleHints(), &QStyleHints::colorSchemeChanged,
-        this, &MainWindow::retheme, Qt::QueuedConnection
+        this, &MainWindow::retheme, Qt::ConnectionType::QueuedConnection
     );
 }
 
@@ -201,7 +201,7 @@ Actions MainWindow::setup_actions() {
     auto *save_auto = action(
         tr("Save &Automatically"),
         [this](auto x) { actions_.save_auto_->setChecked(x); },
-        {}, ":/icons/save1.svg",
+        {}, ":/icons/save.svg",
         tr("Save automatically"),
         true, true
     );
@@ -411,12 +411,11 @@ Actions MainWindow::setup_actions() {
         false
     );
     auto *keep_prev_zoom = action(
-        tr("&Keep Previous Scale"),
+        tr("&Keep Previous Zoom"),
         [this](bool checked) {
             this->config_["keep_prev_scale"] = checked;
         },
-        {}, ":/icons/icon-256.png",
-        tr("Keep previous zoom scale"),
+        {}, {}, {},
         true, true, this->config_["keep_prev_scale"].as<bool>()
     );
     auto *fit_window = action(

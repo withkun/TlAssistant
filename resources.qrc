@@ -5,7 +5,9 @@
         <file>icons/277.png</file>
         <file>icons/285.png</file>
         <file>icons/480.png</file>
+        <file>icons/ai-box.svg</file>
         <file>icons/ai-mask.svg</file>
+        <file>icons/ai-points.svg</file>
         <file>icons/ai-polygon.svg</file>
         <file>icons/arrow-fat-left.svg</file>
         <file>icons/arrow-fat-right.svg</file>
@@ -43,9 +45,8 @@
         <file>icons/question.svg</file>
         <file>icons/quit.png</file>
         <file>icons/rectangle.svg</file>
-        <file>icons/save-as.svg</file>
         <file>icons/save.svg</file>
-        <file>icons/save1.svg</file>
+        <file>icons/save-as.svg</file>
         <file>icons/trash.svg</file>
         <file>icons/x-circle.svg</file>
     </qresource>

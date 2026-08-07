@@ -955,7 +955,7 @@ void Canvas::drag_hovered_rotation_point(QPointF pos) {
     //assert len(self._rotation_original_points) > 0, (
     //    "_capture_rotation_anchors must be called before dragging"
     //)
-    auto current_angle = utils::direction_angle(
+    const auto current_angle = utils::direction_angle(
         this->rotation_center_, pos
     );
     //rotate(
@@ -990,7 +990,7 @@ void Canvas::drag_selected_shapes(QPointF pos) {
     this->is_moving_shape_ = true;
 }
 
-void Canvas::_highlight_hover_shape(const QPointF &pos, QList<QString> &status_messages) {
+void Canvas::highlight_hover_shape(const QPointF &pos, QList<QString> &status_messages) {
     const HitTarget target = find_hover_target(
         this->shapes_,
         pos,
@@ -1074,7 +1074,7 @@ void Canvas::_highlight_hover_shape(const QPointF &pos, QList<QString> &status_m
     //typing.assert_never(target.kind);
 }
 
-void Canvas::highlight_hover_shape(const QPointF &pos, QList<QString> &status_messages) {
+void Canvas::_highlight_hover_shape(const QPointF &pos, QList<QString> &status_messages) {
     std::vector<int32_t> ordered_shapes;
     if (hovered_shape_ != None) { ordered_shapes.push_back(hovered_shape_); }
     for (int32_t idx = shapes_.size() - 1; idx >= 0; --idx) { if (isVisible(shapes_[idx]) && idx != hovered_shape_) { ordered_shapes.push_back(idx); } }

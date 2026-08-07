@@ -244,7 +244,6 @@ private:
     void drag_hovered_rotation_point(QPointF pos);
     void capture_rotation_anchors();
     void drag_selected_shapes(QPointF pos);
-    void _highlight_hover_shape(const QPointF &pos, QList<QString> &status_messages);
     void highlight_hover_shape(const QPointF &pos, QList<QString> &status_messages);
     void add_point_to_edge();
     bool remove_selected_point();
@@ -358,6 +357,7 @@ private:
     void enableDragging(bool enabled);
     bool closeEnough(const QPointF &p1, const QPointF &p2);
 
+    void _highlight_hover_shape(const QPointF &pos, QList<QString> &status_messages);
     QPointF _compute_intersection_edges_image1(const QPointF &p1, const QPointF &p2, const QSize &image_size);
     std::vector<std::tuple<qreal, int32_t, QPointF>> compute_intersection_edges(const QPointF &point1, const QPointF &point2, const std::vector<QPointF> &points);
 };
