@@ -21,21 +21,22 @@ public:
     void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
     QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const override;
 
+    QSize default_size_hint();
+
 private:
     QTextDocument      *doc_{nullptr};
 };
 
 class ShapeListItem : public QStandardItem {
 public:
-    explicit ShapeListItem(const QString &text) { InitItem(text); };
-    ShapeListItem(const QString &text, const TlShape &shape);
+    ShapeListItem(const QString &text, const TlShape &shape={});
 
     ShapeListItem *clone() const override;
     void set_shape(const TlShape &shape);
     TlShape shape() const;
 
 private:
-    void InitItem(const QString &text);
+    void init_item(const QString &text);
 };
 
 // ShapeItemModel -> QStandardItemModel -> QAbstractItemModel -> QObject
@@ -46,7 +47,15 @@ public:
     bool dropMimeData(const QMimeData *data, Qt::DropAction action, int row, int column, const QModelIndex &parent) override;
 
 signals:
-    void itemDropped();
+    void item_dropped();
+};
+
+class ItemSnapshot {
+public:
+    // A persistent index, not the item itself: the model owns the item and
+    // deletes it on row removal, which would leave a dead wrapper here.
+    QPersistentModelIndex   index;
+    Qt::CheckState          check_state;
 };
 
 // QListView是列表形式的展示控件
@@ -57,6 +66,10 @@ class ShapeListView : public QListView {
 public:
     explicit ShapeListView(QWidget *parent = nullptr);
 
+protected:
+    void mousePressEvent(QMouseEvent *e) override;
+    void mouseReleaseEvent(QMouseEvent *e) override;
+
 signals:
     void item_dropped();
     void item_changed(ShapeListItem *item);
@@ -66,8 +79,8 @@ signals:
 public slots:
 
 private:
-    QList<ShapeListItem *>      selectedItems_;
-    ShapeItemModel             *model_{nullptr};
+    ShapeItemModel             *model_{};
+    QList<ItemSnapshot>         press_snapshot_;
 
 public:
     //void __init__();
@@ -75,12 +88,13 @@ public:
     QList<ShapeListItem *> items() const;
     //void __iter__();
 
-    void itemDroppedEvent();
-    void itemChangedEvent(QStandardItem *item);
-    void itemSelectionChangedEvent(const QItemSelection &selected, const QItemSelection &deselect);
-    void itemDoubleClickedEvent(const QModelIndex &index);
+    void on_item_dropped();
+    void on_item_changed(QStandardItem *item);
+    void on_item_selection_changed(const QItemSelection &selected, const QItemSelection &deselected);
+    void on_item_double_clicked(const QModelIndex &index);
     QList<ShapeListItem *> selected_items();
     QList<ShapeListItem *> selection_at_press();
+    ShapeListItem *resolve_item(const QPersistentModelIndex &index);
     void scroll_to_item(ShapeListItem *item);
     void add_item(ShapeListItem *item);
     void removeItem(ShapeListItem *item);
@@ -88,6 +102,8 @@ public:
     ShapeListItem *find_item_by_shape(const TlShape &shape);
     void clear();
 
-    bool empty() const;
+    bool empty() const {
+        return this->model_->rowCount() == 0;
+    }
 };
 #endif //__INC_SHAPE_LIST_H

@@ -11,7 +11,8 @@
 #include <QStandardItemModel>
 
 
-static const std::vector<std::pair<QString, QString>> available_models_{
+namespace {
+const std::vector<std::pair<QString, QString>> available_models_{
     {"efficientsam:10m", "EfficientSam (speed)"},
     {"efficientsam:latest", "EfficientSam (accuracy)"},
     {"sam:100m", "Sam (speed)"},
@@ -22,6 +23,7 @@ static const std::vector<std::pair<QString, QString>> available_models_{
     {"sam2:large", "Sam2 (accuracy)"},
     {"sam3:latest", "Sam3"},
 };
+}
 
 AiAssistAnnotation::AiAssistAnnotation(
     const QString &default_model,

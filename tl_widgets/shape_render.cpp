@@ -121,13 +121,13 @@ void paint_shape_points(
     paint_filled_vertices(
         painter,
         paths.vertices_,
-        !context.highlight_,
+        static_cast<bool>(context.highlight_),
         palette
     );
     paint_filled_vertices(
         painter,
         paths.rotation_vertices_,
-        !context.rotation_highlight_,
+        static_cast<bool>(context.rotation_highlight_),
         palette
     );
     if (context.fill_ && !QKey{"line", "linestrip", "points", "mask"}.contains(shape.shape_type_)) {
@@ -169,7 +169,7 @@ std::pair<float, QString> resolve_vertex_style(
     const int32_t default_size,
     const QString &default_point_type
 ) {
-    if (!highlight && highlight.index_ == vertex_index)
+    if (highlight && highlight.index_ == vertex_index)
         return { default_size * highlight.size_factor(), highlight.point_type() };
     return { default_size, default_point_type };
 }
@@ -226,7 +226,7 @@ void build_shape_oriented_rectangle_arrow_path(
     QPainterPath &path, const TlShape &shape, const float scale
 ) {
     const auto points = oriented_rectangle_arrow_points(shape);
-    const QPointF head_right=points[0]*scale, tip=points[1]*scale, head_left=points[2]*scale, tail=points[3]*scale;
+    const auto head_right=points[0]*scale, tip=points[1]*scale, head_left=points[2]*scale, tail=points[3]*scale;
     path.moveTo(head_right);
     path.lineTo(tip);
     path.lineTo(head_left);

@@ -206,11 +206,11 @@ const QList<QPointF> ORIENTED_RECTANGLE_ARROW_TEMPLATE {
 QList<QPointF> oriented_rectangle_arrow_points(const TlShape &shape) {
     const auto center = oriented_rectangle_center(shape);
     const auto direction = shape.points_[1] - shape.points_[0];
-    const auto angle = float(qAtan2(direction.y(), direction.x()));
+    const auto angle = float(std::atan2(direction.y(), direction.x()));
     QList<QPointF> rotated_points = rotate_points_around_origin(
             ORIENTED_RECTANGLE_ARROW_TEMPLATE, angle
         );
-    std::ranges::for_each(rotated_points, [&](auto &p) { p + center; });
+    std::ranges::for_each(rotated_points, [&](auto &p) { p += center; });
     return rotated_points;
 }
 

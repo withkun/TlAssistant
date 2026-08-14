@@ -34,9 +34,9 @@ public:
     static Palette from_rgb(const std::vector<int32_t> &rgb);
 
     explicit operator bool() const {
-        return !line_.isValid() || !fill_.isValid() ||
-            !select_line_.isValid() || !select_fill_.isValid() ||
-            !vertex_fill_.isValid() || !hvertex_fill_.isValid();
+        return line_.isValid() || fill_.isValid() ||
+            select_line_.isValid() || select_fill_.isValid() ||
+            vertex_fill_.isValid() || hvertex_fill_.isValid();
     }
 };
 

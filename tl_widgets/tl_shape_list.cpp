@@ -17,7 +17,7 @@ QString format_shape_label(const TlShape &shape, const std::vector<int32_t> &fil
     //assert shape.label is not None
     QString text = shape.label_;
     if (shape.group_id_ != None)
-        text += QString(" (%2)").arg(shape.group_id_);
+        text += QString(" (%1)").arg(shape.group_id_);
     //enabled_flags = [key for key, value in (shape.flags or {}).items() if value];
     //if enabled_flags:
     //    text += f" [{', '.join(enabled_flags)}]";
@@ -33,80 +33,98 @@ void HTMLDelegate::paint(
     const QStyleOptionViewItem &option,
     const QModelIndex &index
 ) const {
-    auto *options = new QStyleOptionViewItem(option);
+    auto *opt = new QStyleOptionViewItem(option);
+    this->initStyleOption(opt, index);
 
-    initStyleOption(options, index);
-    doc_->setHtml(options->text);
-    options->text = "";
+    auto html = opt->text;
+    opt->text = "";
 
-    const auto *style = (
-        options->widget == nullptr ? QApplication::style() : options->widget->style()
+    const auto *widget_style = (
+        opt->widget ? opt->widget->style() : QApplication::style()
     );
-    style->drawControl(QStyle::CE_ItemViewItem, options, painter);
+    widget_style->drawControl(QStyle::ControlElement::CE_ItemViewItem, opt, painter);
 
-    auto ctx = QAbstractTextDocumentLayout::PaintContext();
-
-    if (option.state & QStyle::State_Selected) {
-        ctx.palette.setColor(
-            QPalette::Text,
-            option.palette.color(QPalette::Active, QPalette::HighlightedText)
+    QColor text_color;
+    QTextDocument doc;
+    if (opt->state & QStyle::StateFlag::State_Selected) {
+        text_color = opt->palette.color(
+            QPalette::ColorGroup::Active, QPalette::ColorRole::HighlightedText
         );
     } else {
-        ctx.palette.setColor(
-            QPalette::Text,
-            option.palette.color(QPalette::Active, QPalette::Text)
+        text_color = opt->palette.color(
+            QPalette::ColorGroup::Active, QPalette::ColorRole::Text
         );
     }
+    doc.setDefaultStyleSheet(QString("body { color: %1; }").arg(text_color.name()));
+    doc.setHtml(QString("<body>%1</body>").arg(html));
 
-    auto textRect = style->subElementRect(QStyle::SE_ItemViewItemText, options);
-
+    auto text_rect = widget_style->subElementRect(
+        QStyle::SubElement::SE_ItemViewItemText, opt
+    );
     if (index.column() != 0) {
-        textRect.adjust(5, 0, 0, 0);
+        text_rect.adjust(5, 0, 0, 0);
     }
+    // opt.text was emptied above, so some styles (e.g. Adwaita) return a
+    // text sub-rect too narrow for the rendered HTML and clip the label.
+    // Widen it to the document's ideal width so the text stays visible.
+    text_rect.setWidth(std::max(text_rect.width(), (int32_t)std::ceil(doc_->idealWidth())));
 
-    const int32_t VERT_FUDGE = 4;
-    int32_t margin = (option.rect.height() - options->fontMetrics.height()) / 2 - VERT_FUDGE;
-    textRect.setTop(textRect.top() + margin);
+    constexpr int32_t VERT_FUDGE = 4;
+    int32_t margin = (option.rect.height() - opt->fontMetrics.height()) / 2 - VERT_FUDGE;
+    text_rect.setTop(text_rect.top() + margin);
 
     painter->save();
-    painter->translate(textRect.topLeft());
-    painter->setClipRect(textRect.translated(-textRect.topLeft()));
-    doc_->documentLayout()->draw(painter, ctx);
+    painter->translate(text_rect.topLeft());
+    painter->setClipRect(text_rect.translated(-text_rect.topLeft()));
+    doc.drawContents(painter);
     painter->restore();
 }
 
-QSize HTMLDelegate::sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const {
-    const int32_t margin_shift = 4;
-    return QSize(
-        static_cast<int32_t>(doc_->idealWidth()),
-        static_cast<int32_t>(doc_->size().height() - margin_shift)
-    );
+QSize HTMLDelegate::sizeHint(
+    const QStyleOptionViewItem &option,
+    const QModelIndex &index
+) const {
+    constexpr int32_t VERT_FUDGE = 4;
+    auto *opt = new QStyleOptionViewItem(option);
+    this->initStyleOption(opt, index);
+    QTextDocument doc;
+    doc.setHtml(opt->text);
+    const auto height = int32_t(doc.size().height()) - VERT_FUDGE;
+    return {int32_t(doc.idealWidth()), height};
+}
+
+QSize HTMLDelegate::default_size_hint() {
+    constexpr int32_t VERT_FUDGE = 4;
+    QTextDocument doc;
+    const auto height = int32_t(doc.size().height()) - VERT_FUDGE;
+    return {int32_t(doc.idealWidth()), height};
 }
 
 ShapeListItem::ShapeListItem(const QString &text, const TlShape &shape) : QStandardItem() {
-    set_shape(shape);
-    InitItem(text);
-}
-
-void ShapeListItem::InitItem(const QString &text) {
     this->setText(text);
+    this->set_shape(shape);
+
     this->setCheckable(true);
-    this->setCheckState(Qt::Checked);
+    this->setCheckState(
+        !shape || shape.visible_
+        ? Qt::CheckState::Checked
+        : Qt::CheckState::Unchecked
+    );
     this->setEditable(false);
-    this->setTextAlignment(Qt::AlignBottom);
+    this->setTextAlignment(Qt::AlignmentFlag::AlignBottom);
 }
 
 ShapeListItem *ShapeListItem::clone() const {
-    return new ShapeListItem(text(), this->shape());
+    return new ShapeListItem(this->text(), this->shape());
 }
 
 void ShapeListItem::set_shape(const TlShape &shape) {
     this->setData(QVariant(), Qt::UserRole);    // clear first: check equal in setData.
-    this->setData(QVariant::fromValue(shape), Qt::UserRole);
+    this->setData(QVariant::fromValue(shape), Qt::ItemDataRole::UserRole);
 }
 
 TlShape ShapeListItem::shape() const {
-    return this->data(Qt::UserRole).value<TlShape>();
+    return this->data(Qt::ItemDataRole::UserRole).value<TlShape>();
 }
 
 //def __hash__(self):
@@ -116,50 +134,116 @@ TlShape ShapeListItem::shape() const {
 //    return '{}("{}")'.format(self.__class__.__name__, self.text())
 
 
-bool ShapeItemModel::removeRows(int row, int count, const QModelIndex &parent) {
+bool ShapeItemModel::removeRows(
+    const int row,
+    const int count,
+    const QModelIndex &parent
+) {
     const auto ret = QStandardItemModel::removeRows(row, count, parent);
-    emit itemDropped();
+    emit this->item_dropped();
     return ret;
 }
 
-bool ShapeItemModel::dropMimeData(const QMimeData *data, Qt::DropAction action, int row, int column, const QModelIndex &parent) {
+bool ShapeItemModel::dropMimeData(
+    const QMimeData *data,
+    const Qt::DropAction action,
+    int row,
+    int column,
+    const QModelIndex &parent
+) {
     // NOTE: By default, PyQt will overwrite items when dropped on them, so we need
     // to adjust the row/parent to insert after the item instead.
-    //
+    QModelIndex _parent = parent;
     // If row is -1, we're dropping on an item (which would overwrite)
     // Instead, we want to insert after it
-    QModelIndex parent_ = parent;
     if (row == -1 && parent.isValid()) {
         row = parent.row() + 1;
-        parent_ = parent.parent();
+        _parent = parent.parent();
     }
 
     // If still -1, append to end
-    if (row == -1) {
-        row = this->rowCount(parent_);
-    }
+    if (row == -1)
+        row = this->rowCount(_parent);
 
-    return QStandardItemModel::dropMimeData(data, action, row, column, parent_);
+    return QStandardItemModel::dropMimeData(data, action, row, column, _parent);
 }
 
 ShapeListView::ShapeListView(QWidget *parent) : QListView(parent) {
-    this->selectedItems_.clear();
-
-    this->setWindowFlags(Qt::Window);
+    this->setWindowFlags(Qt::WindowType::Window);
 
     this->model_ = new ShapeItemModel();
     this->model_->setItemPrototype(new ShapeListItem(""));
     this->setModel(this->model_);
 
     this->setItemDelegate(new HTMLDelegate(this));
-    this->setSelectionMode(QAbstractItemView::ExtendedSelection);  // 选中模式
-    this->setDragDropMode(QAbstractItemView::InternalMove);
-    this->setDefaultDropAction(Qt::MoveAction);
+    this->setSelectionMode(
+        QAbstractItemView::SelectionMode::ExtendedSelection     // 选中模式
+    );
+    this->setDragDropMode(QAbstractItemView::DragDropMode::InternalMove);
+    this->setDefaultDropAction(Qt::DropAction::MoveAction);
 
-    QObject::connect(this, &ShapeListView::doubleClicked, this, &ShapeListView::itemDoubleClickedEvent);
-    QObject::connect(this->selectionModel(), &QItemSelectionModel::selectionChanged, this, &ShapeListView::itemSelectionChangedEvent);
-    QObject::connect(this->model_, &ShapeItemModel::itemDropped, this, &ShapeListView::itemDroppedEvent);
-    QObject::connect(this->model_, &ShapeItemModel::itemChanged, this, &ShapeListView::itemChangedEvent);
+    QObject::connect(this, &ShapeListView::doubleClicked, this, &ShapeListView::on_item_double_clicked);
+    QObject::connect(this->selectionModel(), &QItemSelectionModel::selectionChanged, this, &ShapeListView::on_item_selection_changed);
+    QObject::connect(this->model_, &ShapeItemModel::item_dropped, this, &ShapeListView::on_item_dropped);
+    QObject::connect(this->model_, &ShapeItemModel::itemChanged, this, &ShapeListView::on_item_changed);
+
+    this->press_snapshot_ = {};
+}
+
+void ShapeListView::mousePressEvent(QMouseEvent *e) {
+    this->press_snapshot_ = this->selected_items() | std::views::transform([this](auto &item) {
+        return ItemSnapshot{
+            .index=QPersistentModelIndex(this->model_->indexFromItem(item)),
+            .check_state=item->checkState()
+        };
+    }) | std::ranges::to<QList<ItemSnapshot>>();
+
+    QListView::mousePressEvent(e);
+}
+
+void ShapeListView::mouseReleaseEvent(QMouseEvent *e) {
+    QListView::mouseReleaseEvent(e);
+
+    // Restore the multi-selection only when a checkbox toggle collapsed it.
+    // A plain row click should narrow the selection to one row.
+    bool check_state_changed = false;
+    QList<ShapeListItem *> items_at_press = {};
+    for (const auto &snap : this->press_snapshot_) {
+        auto *item = this->resolve_item(snap.index);
+        if (item == nullptr)
+            continue;
+        items_at_press.append(item);
+        check_state_changed |= (item->checkState() != snap.check_state);
+    }
+    if (
+        check_state_changed
+        && items_at_press.size() > 1
+        && std::set(this->selected_items().begin(), this->selected_items().end()) != std::set(items_at_press.begin(), items_at_press.end())
+    ) {
+        this->selectionModel()->clearSelection();
+        for (auto &item : items_at_press)
+            this->selectionModel()->select(
+                this->model_->indexFromItem(item),
+                QItemSelectionModel::SelectionFlag::Select
+            );
+    }
+
+    this->press_snapshot_ = {};
+}
+
+QList<ShapeListItem *> ShapeListView::selection_at_press() {
+    return this->press_snapshot_
+        | std::views::transform([this](const auto &snap) { return this->resolve_item(snap.index); })
+        | std::views::filter([](const auto &item) { return item != nullptr; })
+        | std::ranges::to<QList<ShapeListItem *>>();
+}
+
+ShapeListItem *ShapeListView::resolve_item(
+    const QPersistentModelIndex &index
+) {
+    if (!index.isValid())
+        return nullptr;
+    return dynamic_cast<ShapeListItem *>(this->model_->itemFromIndex(index));
 }
 
 int32_t ShapeListView::len() const {
@@ -168,53 +252,45 @@ int32_t ShapeListView::len() const {
 
 QList<ShapeListItem *> ShapeListView::items() const {
     QList<ShapeListItem *> items;
-    for (auto row = 0; row < model_->rowCount(); ++row) {
-        items.push_back(static_cast<ShapeListItem *>(model_->item(row)));
+    for (auto row = 0; row < this->model_->rowCount(); ++row) {
+        items.emplace_back(dynamic_cast<ShapeListItem *>(this->model_->item(row)));
     }
     return items;
 }
 
-//void TlShapeList::__getitem__(i) {
-//}
+//def __getitem__(self, i: int) -> LabelListWidgetItem:
+//    return cast(LabelListWidgetItem, self._model.item(i))
+//
+//def __iter__(self) -> Iterator[LabelListWidgetItem]:
+//    for i in range(len(self)):
+//        yield self[i]
 
-//void TlShapeList::__iter__() {
-//}
-
-void ShapeListView::itemDroppedEvent() {
-    emit item_dropped();
+void ShapeListView::on_item_dropped() {
+    emit this->item_dropped();
 }
 
-void ShapeListView::itemChangedEvent(QStandardItem *item) {
-    emit item_changed(static_cast<ShapeListItem *>(item));
+void ShapeListView::on_item_changed(QStandardItem *item) {
+    emit this->item_changed(dynamic_cast<ShapeListItem *>(item));
 }
 
-void ShapeListView::itemSelectionChangedEvent(const QItemSelection &selected, const QItemSelection &deselect) {
-    QList<ShapeListItem *> selected1, deselect1;
-    const QList<QModelIndex> sel_indexes = selected.indexes(), des_indexes = deselect.indexes();
-    std::ranges::transform(sel_indexes, std::back_inserter(selected1), [this](const auto &idx) { return static_cast<ShapeListItem *>(this->model_->itemFromIndex(idx)); });
-    std::ranges::transform(des_indexes, std::back_inserter(deselect1), [this](const auto &idx) { return static_cast<ShapeListItem *>(this->model_->itemFromIndex(idx)); });
-    emit item_selection_changed(selected1, deselect1);
+void ShapeListView::on_item_selection_changed(
+    const QItemSelection &selected,
+    const QItemSelection &deselected
+) {
+    QList<ShapeListItem *> selected_items = selected.indexes() | std::views::transform([this](const auto &i){ return static_cast<ShapeListItem *>(this->model_->itemFromIndex(i)); }) | std::ranges::to<QList<ShapeListItem *>>();
+    QList<ShapeListItem *> deselected_items = deselected.indexes() | std::views::transform([this](const auto &i){ return static_cast<ShapeListItem *>(this->model_->itemFromIndex(i)); }) | std::ranges::to<QList<ShapeListItem *>>();
+    emit this->item_selection_changed(selected_items, deselected_items);
 }
 
-void ShapeListView::itemDoubleClickedEvent(const QModelIndex &index) {
-    emit item_double_clicked(static_cast<ShapeListItem *>(this->model_->itemFromIndex(index)));
-}
-
-QList<ShapeListItem *> ShapeListView::selection_at_press() {
-    //return tuple(
-    //    item
-    //    for snap in self._press_snapshot
-    //    if (item := self._resolve_item(index=snap.index)) is not None
-    //);
-    return {};
+void ShapeListView::on_item_double_clicked(const QModelIndex &index) {
+    emit this->item_double_clicked(dynamic_cast<ShapeListItem *>(this->model_->itemFromIndex(index)));
 }
 
 QList<ShapeListItem *> ShapeListView::selected_items() {
     //return [self.model().itemFromIndex(i) for i in self.selectedIndexes()]
-    QList<ShapeListItem *> selected;
-    const QList<QModelIndex> indexes = selectedIndexes();
-    std::ranges::transform(indexes, std::back_inserter(selected), [this](const auto &idx) { return static_cast<ShapeListItem *>(this->model_->itemFromIndex(idx)); });
-    return selected;
+    return this->selectedIndexes()
+        | std::views::transform([this](const auto &idx) { return static_cast<ShapeListItem *>(this->model_->itemFromIndex(idx)); })
+        | std::ranges::to<QList<ShapeListItem *>>();
 }
 
 void ShapeListView::scroll_to_item(ShapeListItem *item) {
@@ -222,11 +298,11 @@ void ShapeListView::scroll_to_item(ShapeListItem *item) {
 }
 
 void ShapeListView::add_item(ShapeListItem *item) {
-    if (item == nullptr) {
+    if (item == nullptr)
         throw std::invalid_argument("item must be LabelListWidgetItem");
-    }
     this->model_->setItem(this->model_->rowCount(), 0, item);
-    item->setSizeHint(this->itemDelegate()->sizeHint(QStyleOptionViewItem(), QModelIndex()));
+    auto *delegate = dynamic_cast<HTMLDelegate *>(this->itemDelegate());
+    item->setSizeHint(delegate->default_size_hint());
 }
 
 void ShapeListView::removeItem(ShapeListItem *item) {
@@ -236,24 +312,21 @@ void ShapeListView::removeItem(ShapeListItem *item) {
 
 void ShapeListView::select_item(ShapeListItem *item) {
     const auto index = this->model_->indexFromItem(item);
-    selectionModel()->select(index, QItemSelectionModel::Select);
+    selectionModel()->select(
+        index, QItemSelectionModel::SelectionFlag::Select
+    );
 }
 
 ShapeListItem *ShapeListView::find_item_by_shape(const TlShape &shape) {
     for (auto row = 0; row < this->model_->rowCount(); ++row) {
-        auto *const item = dynamic_cast<ShapeListItem *>(this->model_->item(row, 0));
-        if (item->shape() == shape) {
+        auto *s_it = this->model_->item(row, 0);
+        auto *item = dynamic_cast<ShapeListItem *>(s_it);
+        if (item->shape() == shape)
             return item;
-        }
     }
-    throw std::runtime_error("cannot find shape: {}"); //.format(shape));
+    throw std::runtime_error("cannot find shape: {shape}"); //.format(shape));
 }
 
 void ShapeListView::clear() {
     this->model_->clear();
-    this->selectedItems_.clear();
-}
-
-bool ShapeListView::empty() const {
-    return this->model_->rowCount() == 0;
 }
