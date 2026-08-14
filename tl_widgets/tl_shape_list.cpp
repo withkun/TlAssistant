@@ -33,8 +33,6 @@ void HTMLDelegate::paint(
     const QStyleOptionViewItem &option,
     const QModelIndex &index
 ) const {
-    painter->save();
-
     auto *options = new QStyleOptionViewItem(option);
 
     initStyleOption(options, index);
@@ -66,15 +64,14 @@ void HTMLDelegate::paint(
         textRect.adjust(5, 0, 0, 0);
     }
 
-    const int32_t margin_shift = 4;
-    int32_t margin = (option.rect.height() - options->fontMetrics.height()) / 2;
-    margin = margin - margin_shift;
+    const int32_t VERT_FUDGE = 4;
+    int32_t margin = (option.rect.height() - options->fontMetrics.height()) / 2 - VERT_FUDGE;
     textRect.setTop(textRect.top() + margin);
 
+    painter->save();
     painter->translate(textRect.topLeft());
     painter->setClipRect(textRect.translated(-textRect.topLeft()));
     doc_->documentLayout()->draw(painter, ctx);
-
     painter->restore();
 }
 
@@ -87,7 +84,7 @@ QSize HTMLDelegate::sizeHint(const QStyleOptionViewItem &option, const QModelInd
 }
 
 ShapeListItem::ShapeListItem(const QString &text, const TlShape &shape) : QStandardItem() {
-    setShape(shape);
+    set_shape(shape);
     InitItem(text);
 }
 
@@ -103,7 +100,7 @@ ShapeListItem *ShapeListItem::clone() const {
     return new ShapeListItem(text(), this->shape());
 }
 
-void ShapeListItem::setShape(const TlShape &shape) {
+void ShapeListItem::set_shape(const TlShape &shape) {
     this->setData(QVariant(), Qt::UserRole);    // clear first: check equal in setData.
     this->setData(QVariant::fromValue(shape), Qt::UserRole);
 }
@@ -201,6 +198,15 @@ void ShapeListView::itemSelectionChangedEvent(const QItemSelection &selected, co
 
 void ShapeListView::itemDoubleClickedEvent(const QModelIndex &index) {
     emit item_double_clicked(static_cast<ShapeListItem *>(this->model_->itemFromIndex(index)));
+}
+
+QList<ShapeListItem *> ShapeListView::selection_at_press() {
+    //return tuple(
+    //    item
+    //    for snap in self._press_snapshot
+    //    if (item := self._resolve_item(index=snap.index)) is not None
+    //);
+    return {};
 }
 
 QList<ShapeListItem *> ShapeListView::selected_items() {

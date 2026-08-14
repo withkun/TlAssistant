@@ -65,5 +65,19 @@ struct formatter<QColor> : formatter<string_view> {
         return formatter<string_view>::format(ss.str(), ctx);
     }
 };
+
+template<>
+struct formatter<QList<QPointF>> : formatter<string_view> {
+    auto format(const QList<QPointF> &val, format_context &ctx) const -> decltype(ctx.out()) {
+        std::stringstream ss;
+        ss << "[";
+        for (size_t i = 0; i < val.size(); ++i) {
+            if (i != 0) { ss << ", "; }
+            ss << "(" << val[i].x() << ", " << val[i].y() << ")";
+        }
+        ss << "]";
+        return formatter<string_view>::format(ss.str(), ctx);
+    }
+};
 } //namespace std
 #endif //__INC_FORMAT_QT_H

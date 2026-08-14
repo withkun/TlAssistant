@@ -24,7 +24,7 @@ QString VertexHighlight::point_type() const {
 
 //@classmethod
 Palette Palette::from_rgb(const std::vector<int32_t> &rgb) {
-    int32_t r = rgb[0], g = rgb[1], b = rgb[2];
+    const int32_t r = rgb[0], g = rgb[1], b = rgb[2];
     return Palette{
         .line_ = QColor(r, g, b),
         .fill_ = QColor(r, g, b, 128),
@@ -33,12 +33,6 @@ Palette Palette::from_rgb(const std::vector<int32_t> &rgb) {
         .vertex_fill_ = QColor(r, g, b),
         .hvertex_fill_ = QColor(255, 255, 255),
     };
-}
-
-bool Palette::empty() const {
-    return !line_.isValid() || !fill_.isValid() ||
-        !select_line_.isValid() || !select_fill_.isValid() ||
-        !vertex_fill_.isValid() || !hvertex_fill_.isValid();
 }
 
 void render_shape(
@@ -127,13 +121,13 @@ void paint_shape_points(
     paint_filled_vertices(
         painter,
         paths.vertices_,
-        !(context.highlight_),
+        !context.highlight_,
         palette
     );
     paint_filled_vertices(
         painter,
         paths.rotation_vertices_,
-        !(context.rotation_highlight_),
+        !context.rotation_highlight_,
         palette
     );
     if (context.fill_ && !QKey{"line", "linestrip", "points", "mask"}.contains(shape.shape_type_)) {
@@ -175,7 +169,7 @@ std::pair<float, QString> resolve_vertex_style(
     const int32_t default_size,
     const QString &default_point_type
 ) {
-    if (highlight && highlight.index_ == vertex_index)
+    if (!highlight && highlight.index_ == vertex_index)
         return { default_size * highlight.size_factor(), highlight.point_type() };
     return { default_size, default_point_type };
 }
@@ -209,7 +203,6 @@ void build_shape_rotation_point_path(
         context.point_type_
     );
     const auto handle = get_rotation_handle(shape, vertex_index);
-    assert(true);
     const auto pos = handle * context.scale_;
     draw_vertex(path, pos, size, point_type);
 }
@@ -370,7 +363,7 @@ QRectF shape_bounds(const TlShape &shape) {
 }
 
 QPainterPath build_image_path(const TlShape &shape) {
-    auto points = shape.points_;
+    const auto &points = shape.points_;
     auto out = QPainterPath();
     if (QKey{"rectangle", "mask"}.contains(shape.shape_type_)) {
         if (points.size() == 2)

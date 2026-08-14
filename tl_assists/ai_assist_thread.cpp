@@ -2,7 +2,7 @@
 #include "tl_widgets/tl_canvas.h"
 
 
-AiAssistThread::AiAssistThread(Canvas *canvas) : QThread(), canvas_(canvas) {
+AiAssistThread::AiAssistThread(AiAssistSession *session) : QThread(), session_(session) {
     this->setObjectName("AiAssistThread");
     this->start();
 }
@@ -52,7 +52,7 @@ void AiAssistThread::run() {
         }
 
         try {
-            canvas_->update_shape_with_ai(points, labels);
+            session_->propose_shapes(points, labels);
         } catch (std::exception &e) {
             SPDLOG_ERROR("AiAssistThread run Exception {}", e.what());
         } catch (...) {

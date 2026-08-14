@@ -30,7 +30,9 @@ struct BoundingBox {
     int32_t                         x2{0};         // br_x
     int32_t                         y2{0};         // br_y
 
-    bool isNone() const { return x1 == 0 && y1 == 0 && x2 == 0 && y2 == 0; }
+    explicit operator bool() const {
+        return !(x1 == 0 && y1 == 0 && x2 == 0 && y2 == 0);
+    }
 };
 
 struct Annotation {

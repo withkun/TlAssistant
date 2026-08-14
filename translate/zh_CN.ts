@@ -9,11 +9,11 @@
     </message>
     <message>
         <source>AI suggests annotation in &apos;AI-Points&apos; and &apos;AI-Box&apos; modes</source>
-        <translation>在 'AI多边形' 和 'AI蒙板' 模式下提供辅助标注</translation>
+        <translation>在 'AI轮廓' 和 'AI蒙板' 模式下提供辅助标注</translation>
     </message>
     <message>
         <source>Select &apos;AI-Points&apos; or &apos;AI-Box&apos; mode to enable AI-Assisted Annotation</source>
-        <translation>选择 'AI多边形' 或 'AI蒙板' 模式以启用 AI 辅助标注</translation>
+        <translation>选择 'AI轮廓' 或 'AI蒙板' 模式以启用 AI 辅助标注</translation>
     </message>
 </context>
 <context>
@@ -44,7 +44,7 @@
     </message>
     <message>
         <source>Select &apos;Polygon&apos;, &apos;Rectangle&apos;, or &apos;AI-Points&apos; mode to enable</source>
-        <translation>请选择 '多边形'、'矩形' 或 'AI多边形' 模式以启用</translation>
+        <translation>请选择 '多边形'、'矩形' 或 'AI轮廓' 模式以启用</translation>
     </message>
 </context>
 <context>
@@ -661,7 +661,7 @@ To use the preferences editor, start Labelme with a config file:
     </message>
     <message>
         <source>AI-Points</source>
-        <translation>AI多边形</translation>
+        <translation>AI轮廓</translation>
     </message>
     <message>
         <source>Click points to segment object. Ctrl+LeftClick ends creation.</source>
@@ -677,7 +677,7 @@ To use the preferences editor, start Labelme with a config file:
     </message>
     <message>
         <source>AI-Points Unavailable</source>
-        <translation>AI多边形 不可用</translation>
+        <translation>AI轮廓 不可用</translation>
     </message>
     <message>
         <source>%1 does not support point prompts.

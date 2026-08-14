@@ -7,14 +7,14 @@
 
 class ShapeDict {
 public:
-    QString                 label;
-    QList<QPointF>          points;
-    QString                 shape_type;
-    QMap<QString, bool>     flags;
-    QString                 description;
-    int32_t                 group_id;
-    cv::Mat                 mask;
-    QMap<QString, QString>  other_data;
+    QString                     label_;
+    QList<QPointF>              points_;
+    QString                     shape_type_;
+    QMap<QString, bool>         flags_;
+    QString                     description_;
+    int32_t                     group_id_;
+    cv::Mat                     mask_;
+    QMap<QString, QByteArray>   other_data_;
 };
 
 struct AnnotationEx {
@@ -23,6 +23,10 @@ struct AnnotationEx {
     QList<ShapeDict>            shapes_;
     QMap<QString, bool>         flags_;
     QMap<QString, QByteArray>   other_data_;
+
+    bool isNull() const {
+        return image_path_.isEmpty() && shapes_.isEmpty();
+    }
 };
 
 class OSError : public std::exception {
@@ -61,36 +65,4 @@ AnnotationEx read_label_file(const QString &filename);
 
 void write_label_file(const QString &filename, const AnnotationEx &annotation, int32_t image_height, int32_t image_width, bool save_image_data);
 
-class LabelFile : public QObject {
-public:
-    explicit LabelFile(const QString &filename = "");
-
-    static QString suffix;
-
-    static QByteArray load_image_file(const QString &filename);
-
-    void load(const QString &filename);
-
-    void save(const QString &filename,
-              const QList<TlShape> &shapes,
-              const QString &imagePath,
-              const QByteArray &imageData,
-              int32_t imageHeight,
-              int32_t imageWidth,
-              const QString &otherData="",
-              const QMap<QString, bool> &flags={});
-
-private:
-    std::pair<int32_t, int32_t> check_image_height_and_width(const QByteArray &imageData, int32_t imageHeight, int32_t imageWidth);
-
-public:
-    QString         flags_;
-    QList<TlShape>  shapes_;
-    QList<ShapeDict>  shapes1_;
-
-    QString         filename_;
-    QString         imagePath_;
-    QByteArray      imageData_;
-    QByteArray      otherData_;
-};
 #endif //__INC_LABEL_FILE_H

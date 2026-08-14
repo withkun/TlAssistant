@@ -98,14 +98,14 @@ struct formatter<cv::Size_<T>> {
     }
 };
 
-//template<>
-//struct formatter<cv::Size2i> : formatter<string_view> {
-//    auto format(const cv::Size2i &val, format_context &ctx) const -> decltype(ctx.out()) {
-//        const auto str = std::format("[{}, {}]", val.width, val.height);
-//        return formatter<string_view>::format(str, ctx);
-//    }
-//};
-//
+template<>
+struct formatter<cv::Size2i> : formatter<string_view> {
+    auto format(const cv::Size2i &val, format_context &ctx) const -> decltype(ctx.out()) {
+        const auto str = std::format("[{}, {}]", val.width, val.height);
+        return formatter<string_view>::format(str, ctx);
+    }
+};
+
 // template<>
 // struct formatter<cv::Size2l> : formatter<string_view> {
 //     auto format(const cv::Size2l &val, format_context &ctx) const -> decltype(ctx.out()) {

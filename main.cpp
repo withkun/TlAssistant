@@ -80,7 +80,7 @@ void qMessageHandler(QtMsgType type, const QMessageLogContext &context, const QS
 }
 
 int main(int argc, char *argv[]) {
-    QApplication a(argc, argv);
+    QApplication app(argc, argv);
 
     // 解析命令行参数
     cv::CommandLineParser parser(argc, argv, args);
@@ -96,10 +96,10 @@ int main(int argc, char *argv[]) {
     QLocale locale;
     QTranslator translator;
     qInfo() << translator.load(":/i18n/zh_CN.qm", ":/i18n/");
-    a.installTranslator(&translator);
+    QApplication::installTranslator(&translator);
 
     qInfo() << QStyleFactory::keys();
-    a.setStyle(QStyleFactory::create("Fusion"));
+    QApplication::setStyle(QStyleFactory::create("Fusion"));
     QQuickStyle::setStyle("Fusion");
 
     QString config_file;
@@ -122,8 +122,8 @@ int main(int argc, char *argv[]) {
         output_dir = QString::fromStdString(v_output_dir);
     }
 
-    MainWindow w(config_file, config_overrides, file_name, output_dir);
-    w.show();
+    MainWindow win(config_file, config_overrides, file_name, output_dir);
+    win.show();
 
-    return a.exec();
+    return QApplication::exec();
 }

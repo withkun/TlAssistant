@@ -8,8 +8,7 @@
 #include "tl_shape.h"
 #include "shape_render.h"
 #include "canvas_interaction.h"
-#include "tl_modules/sam_session.h"
-#include "tl_modules/ai_assist_thread.h"
+#include "tl_assists/ai_assist_session.h"
 
 // 信号与槽和设计模式中的观察者模式很类似
 // emit
@@ -45,7 +44,7 @@ inline QString ModeName(const CanvasMode c) {
         {CanvasMode::EDIT,   "EDIT"},
     };
     const auto it = ModeNames.find(c);
-    return (it != ModeNames.end()) ? it->second : "Unknown";
+    return it != ModeNames.end() ? it->second : "Unknown";
 }
 
 //#define ENUM_TO_STRING(EnumType, ...)   \
@@ -66,8 +65,27 @@ public:
     DraftShape close();
     DraftShape open();
 
-    DraftShape add_point(const QPointF &point, int32_t label = 1, bool autoclose = false);
+    DraftShape add_point(const QPointF &point, int32_t label=1, bool autoclose=false);
     DraftShape pop_point();
+
+public:
+    void clear();
+
+    bool empty() const {
+        return this->points_.empty();
+    }
+
+    int32_t size() const{
+        return static_cast<int32_t>(this->points_.size());
+    }
+
+    QPointF operator[](int32_t index) const {
+        return (index >= 0) ? this->points_[index] : this->points_[this->points_.size() + index];
+    }
+
+    explicit operator bool() const {
+        return !this->points_.empty();
+    }
 };
 
 class Canvas : public QWidget {
@@ -116,7 +134,10 @@ signals:
 
 private:
     friend class MainWindow;
+    friend class AiAssistSession;
     using fColorResolver = std::function<std::vector<int32_t>(const QString &)>;
+    QPixmap                             pixmap_;
+    size_t                              pixmap_hash_;
     QString                             create_mode_;
     bool                                fill_drawing_;
     bool                                show_labels_;
@@ -125,6 +146,7 @@ private:
     QString                             point_type_;
     Palette                             draft_palette_;
     QMap<QString, Palette>              palette_cache_;             // : dict[str, Palette]
+    CanvasMode                          mode_;
 
     QPair<QPointF, QRectF>              drag_anchor_;               // : tuple[QPointF, QRectF]
     QPointF                             rotation_center_;           // : np.ndarray
@@ -135,63 +157,39 @@ private:
     VertexHighlight                     highlight_;
     VertexHighlight                     rotation_highlight_;
 
+    float                               scale_{1.0};
     float                               epsilon_{10.0};
     QString                             double_click_;
-    int32_t                             num_backups_;
-    bool                                allow_out_of_bounds_points_;
+    int32_t                             num_backups_{};
+    bool                                allow_out_of_bounds_points_{};
     QMap<QString, bool>                 crosshair_;
 
-    CanvasMode                          mode_;
-
-    std::string                         sam_session_model_name_{"sam2:latest"};
-    std::unique_ptr<SamSession>         sam_session_{nullptr};
-    std::string                         ai_output_format_;
-
-    friend class AiAssistThread;
-    std::mutex                          mutex_;  // lock for AI shape.
-    std::unique_ptr<AiAssistThread>     ai_assist_thread_;
-    QList<QPointF>                      ai_assist_points_;
-    QList<TlShape>                      ai_assist_shapes_;
-    bool                                ai_inference_failed_;
+    std::unique_ptr<AiAssistSession>    ai_assist_session_;
+    bool                                ai_inference_failed_{};
 
     QList<TlShape>                      shapes_;
     QList<QList<TlShape>>               shape_backups_;    //多次复制记录.
-    bool                                is_moving_shape_;
-    TlShape                             current_;
-    DraftShape                          current;
+    bool                                is_moving_shape_{};
+    DraftShape                          current_;
     QList<int32_t>                      selected_shapes_;
     QList<TlShape>                      selected_shapes_copy_;
-    TlShape                             line_;
-    DraftShape                          line;
+    DraftShape                          line_;
 
     QPointF                             prev_point_;
     QPointF                             prev_move_point_;
-    QList<QPointF>                      offsets_;
+    int32_t                             hovered_shape_{None};
+    int32_t                             hovered_vertex_{None};
+    int32_t                             hovered_edge_{None};
+    int32_t                             hovered_rotation_{None};
+    int32_t                             last_hovered_shape_{None};
+    int32_t                             last_hovered_vertex_{None};
+    int32_t                             last_hovered_edge_{None};
 
-    float                               scale_{1.0};
-    QPixmap                             pixmap_;
-    size_t                              pixmap_hash_;
-
-    QMap<QString, bool>                 visible_;
-    bool                                hideBackround_;
-    bool                                hideBackround1_;
-    int32_t                             hovered_shape_;
-    int32_t                             hovered_vertex_;
-    int32_t                             hovered_edge_;
-    int32_t                             hovered_rotation_;
-
-    int32_t                             last_hovered_shape_;
-    int32_t                             last_hovered_vertex_;
-    int32_t                             last_hovered_edge_;
-
-    bool                                snapping_;
-    bool                                hovered_shape_is_selected_;
+    bool                                snapping_{};
+    bool                                hovered_shape_is_selected_{};
 
     QPainter                            painter_;
     CursorRole                          cursor_;
-    QPointF                             dragging_start_pos_;
-    bool                                is_dragging_;
-    bool                                is_dragging_enabled_;
 
     ContextMenuPair                     context_menus_;
     QPoint                              context_menu_origin_;
@@ -206,7 +204,7 @@ private:
     void highlight_vertex(int32_t index, const QString &mode);
     void highlight_rotation_point(int32_t index, const QString &mode);
     void clear_highlight_state();
-    ShapeRenderContext render_context(const TlShape &shape, bool highlighted);
+    ShapeRenderContext render_context(const TlShape &shape, int32_t index, bool highlighted);
     ShapeRenderContext draft_render_context(bool selected, bool fill, const VertexHighlight &highlight, const VertexHighlight &rotation_highlight);
     bool is_drawing() const;
     QString create_mode() const;
@@ -215,7 +213,7 @@ private:
     std::string get_ai_model_name();
     void set_ai_model_name(const std::string &model_name);
     void set_ai_output_format(const std::string &output_format);
-    QList<TlShape> shapes_from_ai_points(QList<QPointF> &points, QList<int32_t> &point_labels);
+    QList<TlShape> shapes_from_ai_points(const QList<QPointF> &points, const QList<int32_t> &point_labels);
     void report_inference_failure(const QString& error);
     void backup_shapes();
     bool can_restore_shape();
@@ -228,7 +226,7 @@ private:
     bool is_vertex_selected() const;
     bool is_edge_selected() const;
     bool is_rotation_point_selected() const;
-    void update_status(const QList<QString> &extra_messages);
+    void update_status(const QList<QString> &extra_messages={});
     QString get_create_mode_message();
     //def mouseMoveEvent(self, a0: QtGui.QMouseEvent) -> None:
     void dispatch_pointer_move(const QPointF &pos, QMouseEvent *event);
@@ -236,19 +234,19 @@ private:
     void track_drawing_cursor(QPointF pos, QMouseEvent *event);
     QPointF project_drawing_pos_into_image(const QPointF &pos);
     bool cursor_should_snap_to_polygon_origin(const QPointF &pos);
-    void refresh_hover_state(QPointF pos);
+    void refresh_hover_state(const QPointF &pos);
     QPointF update_drawing_line(QPointF pos, bool is_shift_pressed);
-    void continue_right_button_drag(QPointF pos);
+    void continue_right_button_drag(const QPointF &pos);
     void continue_left_button_drag(const QPointF &pos, QMouseEvent *event);
-    void drag_hovered_vertex(QPointF pos, bool is_shift_pressed);
-    void drag_hovered_rotation_point(QPointF pos);
+    void drag_hovered_vertex(const QPointF &pos, bool is_shift_pressed);
+    void drag_hovered_rotation_point(const QPointF &pos);
     void capture_rotation_anchors();
-    void drag_selected_shapes(QPointF pos);
+    void drag_selected_shapes(const QPointF &pos);
     void highlight_hover_shape(const QPointF &pos, QList<QString> &status_messages);
     void add_point_to_edge();
     bool remove_selected_point();
     //def mousePressEvent(self, a0: QtGui.QMouseEvent) -> None:
-    void dispatch_pointer_press(QPointF pos, QMouseEvent *event);
+    void dispatch_pointer_press(const QPointF &pos, QMouseEvent *event);
     void press_left(const QPointF &pos, QMouseEvent *event);
     void press_left_while_drawing(const QPointF &pos, QMouseEvent *event, bool is_shift_pressed);
     void extend_current_shape(DraftShape current, QMouseEvent *event);
@@ -257,7 +255,7 @@ private:
     void start_new_shape(const QPointF &pos, QMouseEvent *event, bool is_shift_pressed);
     void press_left_while_editing(const QPointF &pos, QMouseEvent *event);
     bool maybe_modify_polygon_topology(Qt::KeyboardModifiers modifiers);
-    void press_right(QPointF pos, QMouseEvent *event);
+    void press_right(const QPointF &pos, QMouseEvent *event);
     void begin_pan(QMouseEvent *event);
     //def mouseReleaseEvent(self, a0: QtGui.QMouseEvent) -> None:
     void dispatch_pointer_release(QMouseEvent *event);
@@ -265,7 +263,7 @@ private:
     void release_left();
     void finish_pan();
     bool is_image_overflowing_viewport();
-    QWidget *scroll_viewport();
+    QWidget *scroll_viewport() const;
     void commit_pending_shape_move();
     bool end_move(bool copy);
     void apply_copy_move();
@@ -274,11 +272,11 @@ private:
     //def mouseDoubleClickEvent(self, a0: QtGui.QMouseEvent) -> None:
     void select_shapes(const QList<TlShape> &shapes);
     void select_shape_point(const QPointF &point, bool multiple_selection_mode);
-    TlShape find_shape_at_point(QPointF point);
-    void record_drag_anchor(QPointF click);
+    int32_t find_shape_at_point(const QPointF &point) const;
+    void record_drag_anchor(const QPointF &click);
     void bounded_move_vertex(TlShape &shape, int32_t vertex_index, QPointF pos, bool is_shift_pressed);
     void bounded_move_oriented_rectangle_vertex(TlShape &shape, int32_t vertex_index, const QPointF &pos);
-    bool drag_shapes(QList<TlShape> &shapes, QPointF pos, const QList<int32_t> &indexes={});
+    bool drag_shapes(QList<TlShape> &shapes, const QPointF &cursor, const QList<int32_t> &indexes={});
     bool deselect_shape();
     QList<TlShape> delete_selected();
     void delete_shape(const TlShape &shape);
@@ -288,24 +286,24 @@ private:
     QList<std::function<void(QPainter &)>> render_layers();
     void draw_pixmap_layer(QPainter &painter);
     void draw_crosshair_layer(QPainter &painter);
-    bool should_draw_crosshair(QPointF &cursor);
+    bool should_draw_crosshair(const QPointF &cursor);
     void draw_committed_shapes_layer(QPainter &painter);
     void draw_active_shape_layer(QPainter &painter);
     void draw_drag_copy_layer(QPainter &painter);
     void draw_preview_overlay_layer(QPainter &painter);
-    void render_draft(QPainter &painter, DraftShape draft, bool highlighted);
+    void render_draft(QPainter &painter, const DraftShape &draft, bool highlighted);
     TlShape build_preview_shape();
-    TlShape build_polygon_preview(DraftShape current);
+    TlShape build_polygon_preview(const DraftShape &current);
     TlShape build_ai_points_preview(DraftShape current);
-    QPointF transform_point_widget_to_image(QPointF point);
+    QPointF transform_point_widget_to_image(const QPointF &point);
     QPointF compute_image_origin_offset();
     bool is_out_of_pixmap(const QPointF &p);
-    bool should_constrain_to_pixmap(QPointF point);
+    bool should_constrain_to_pixmap(const QPointF &point);
     void finalize();
-    //def _build_new_shapes_from_ai_inference(self) -> list[Shape]:
+    QList<TlShape> build_new_shapes_from_ai_inference();
     void reset_after_shape_creation();
     void cancel_current_shape();
-    QSize compute_canvas_size();
+    QSize compute_canvas_size() const;
     //def sizeHint(self) -> QtCore.QSize:
     //def minimumSizeHint(self) -> QtCore.QSize:
     //def wheelEvent(self, a0: QtGui.QWheelEvent) -> None:
@@ -316,24 +314,24 @@ private:
     void undo_last_line();
     void undo_last_point();
     void reset_interaction_state();
-    void load_pixmap(const QPixmap &pixmap, const QString &filename, bool clear_shapes = true);
-    void load_shapes(const QList<TlShape> &shapes, bool replace = true);
-    void set_shape_visible(const TlShape &shape, bool value);
+    void load_pixmap(const QPixmap &pixmap, bool clear_shapes=true, const QString &filename="");
+    void load_shapes(const QList<TlShape> &shapes, bool replace=true);
+    void set_shape_visible(TlShape &shape, bool value);
     void apply_cursor(CursorRole role);
     void release_cursor();
     void reset_state();
 
     static bool is_degenerate_draft(const DraftShape &draft);
-    static QList<QPointF> normalize_bbox_points(QList<QPointF> bbox_points);
-    static QPointF snap_cursor_pos_for_square(QPointF pos, QPointF opposite_vertex);
+    static QList<QPointF> normalize_bbox_points(const QList<QPointF> &bbox_points);
+    static QPointF snap_cursor_pos_for_square(const QPointF &pos, const QPointF &opposite_vertex);
     static int32_t compute_overscroll_slack(int32_t scaled, int32_t viewport);
     static QPointF compute_intersection_edges_image(const QPointF &p1, const QPointF &p2, const QSize &image_size);
     static bool should_reselect_on_right_press(const QList<int32_t> &selected_shapes, int32_t hovered_shape);
-    static TlShape pick_pending_moved_shape(bool is_moving_shape, TlShape hovered_shape, QList<TlShape> shapes);
-    static QPointF opposite_corner_in_parallelogram(QPointF opposite_to, QPointF neighbor1, QPointF neighbor2);
-    static QPair<QPointF, QPointF> project_oriented_rectangle_corners(QPointF anchor, QPointF edge_axis, QPointF moving);
-    static bool is_out_of_image(QPointF point, QSize image_size);
-    static QList<QPointF> reproject_oriented_rectangle_corners(QList<QPointF> corners, int32_t vertex_index, QPointF pos, QSize image_size, bool allow_out_of_bounds);
+    static TlShape pick_pending_moved_shape(bool is_moving_shape, int32_t hovered_index, const QList<TlShape> &shapes);
+    static QPointF opposite_corner_in_parallelogram(const QPointF &opposite_to, const QPointF &neighbor1, const QPointF &neighbor2);
+    static QPair<QPointF, QPointF> project_oriented_rectangle_corners(const QPointF &anchor, const QPointF &edge_axis, const QPointF &moving);
+    static bool is_out_of_image(const QPointF &point, const QSize &image_size);
+    static QList<QPointF> reproject_oriented_rectangle_corners(const QList<QPointF> &corners, int32_t vertex_index, const QPointF &pos, const QSize &image_size, bool allow_out_of_bounds);
 
 
 
@@ -346,19 +344,5 @@ private:
     SamSession &get_osam_session();
     QList<TlShape> shapes_from_points_ai(const QList<QPointF> &points, const QList<int32_t> &labels);
     QList<TlShape> shapes_from_bbox_ai(const QList<QPointF> &bbox_points);
-
-    bool fillDrawing() const;
-    bool isVisible(const TlShape &shape);
-    bool drawing();
-    bool editing();
-    void hideBackroundShapes(bool value);
-    void setHiding(bool enable = true);
-    void calculateOffsets(const QPointF &point);
-    void enableDragging(bool enabled);
-    bool closeEnough(const QPointF &p1, const QPointF &p2);
-
-    void _highlight_hover_shape(const QPointF &pos, QList<QString> &status_messages);
-    QPointF _compute_intersection_edges_image1(const QPointF &p1, const QPointF &p2, const QSize &image_size);
-    std::vector<std::tuple<qreal, int32_t, QPointF>> compute_intersection_edges(const QPointF &point1, const QPointF &point2, const std::vector<QPointF> &points);
 };
 #endif //__INC_CANVAS_H

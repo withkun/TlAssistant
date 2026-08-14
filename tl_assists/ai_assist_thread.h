@@ -4,7 +4,7 @@
 #include <QThread>
 
 
-class Canvas;
+class AiAssistSession;
 class AiAssistThread : public QThread {
     Q_OBJECT
     struct Task {
@@ -12,7 +12,7 @@ class AiAssistThread : public QThread {
         QList<int32_t> labels_;
     };
 public:
-    explicit AiAssistThread(Canvas *canvas);
+    explicit AiAssistThread(AiAssistSession *session);
     ~AiAssistThread() override;
 
     // 提交任务, 队列为空时接受开始处理, 队列不空时直接丢弃.
@@ -22,7 +22,7 @@ protected:
     void run() override;
 
 private:
-    Canvas                     *canvas_{nullptr};
+    AiAssistSession            *session_{nullptr};
 
     std::atomic<bool>           stop_{false};       // 退出标识
     std::atomic<bool>           busy_{false};       // 执行标识

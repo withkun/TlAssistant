@@ -38,6 +38,27 @@ inline bool operator<(const QPointF &a, const QPointF &b) {
     return a.y() < b.y();
 }
 
+inline bool operator<(const QList<QPointF> &lsh, const QList<QPointF> &rsh) {
+    if (lsh.size() != rsh.size()) {
+        return lsh.size() < rsh.size();
+    }
+
+    // 标准字典序比较: 逐个元素比较, 一旦分出大小立即返回.
+    return std::ranges::lexicographical_compare(lsh, rsh, [](const auto &a, const auto &b) {
+            if (a.x() != b.x()) {
+                return a.x() < b.x();
+            }
+            return a.y() < b.y();
+        }
+    );
+}
+
+struct QListCompare {
+    bool operator()(const QList<QPointF> &lsh, const QList<QPointF> &rsh) const {
+        return lsh < rsh;
+    }
+};
+
 std::vector<QColor> label_colormap();
 
 using QKey = std::set<QString>;
@@ -52,8 +73,8 @@ class utils {
     static QString format_shortcut(const QString &text);
 
     static double  direction_angle(const QPointF &start, const QPointF &end);
-    static QPointF project_point_on_line(QPointF point, QPointF line_start, QPointF line_end);
-    static QPointF project_point_on_perpendicular_line(QPointF point, QPointF line_start, QPointF line_end);
+    static QPointF project_point_on_line(const QPointF &point, const QPointF &line_start, const QPointF &line_end);
+    static QPointF project_point_on_perpendicular_line(const QPointF &point, const QPointF &line_start, const QPointF &line_end);
 
     static QAction *newAction(const QString &text, const QList<QString> &shortcut={}, const QString &file="", const QString &tip="", bool enabled=true, bool checkable=false, bool checked=false);
 
@@ -74,7 +95,7 @@ class utils {
     static QPixmap MatToPixmap(const cv::Mat &mat);
 
     static cv::Rect masks_to_bboxes(const cv::Mat &mask);
-    static std::vector<cv::Rect> masks_to_bboxes1(const std::vector<cv::Mat> &masks);
+    static std::vector<cv::Rect> masks_to_bboxes(const std::vector<cv::Mat> &masks);
 
     static cv::Mat img_data_to_arr(const QByteArray &img_data);
     static QByteArray img_arr_to_data(const cv::Mat &img_data);

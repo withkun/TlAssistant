@@ -7,11 +7,11 @@
 #include <QDoubleSpinBox>
 
 
-class AiTextToAnnotation : public QWidget {
+class AiPromptAnnotation : public QWidget {
     Q_OBJECT
 public:
-    explicit AiTextToAnnotation(const std::string &default_model, const std::function<void()> &on_submit, QWidget *parent = nullptr);
-    ~AiTextToAnnotation() override;
+    explicit AiPromptAnnotation(const std::string &default_model, const std::function<void()> &on_submit, QWidget *parent = nullptr);
+    ~AiPromptAnnotation() override;
 
     void setEnabled(bool a0);
     bool eventFilter(QObject *watched, QEvent *event) override;
@@ -25,10 +25,10 @@ public:
     void init_ui(const std::string &default_model, const std::function<void()> &on_submit);
 
 private:
-    QWidget                *body_;
-    QLineEdit              *text_input_;
-    QComboBox              *model_combo_;
-    QDoubleSpinBox         *score_spinbox_;
-    QDoubleSpinBox         *iou_spinbox_;
+    QWidget                *body_{};
+    QLineEdit              *text_input_{};
+    QComboBox              *model_combo_{};
+    QDoubleSpinBox         *score_spinbox_{};
+    QDoubleSpinBox         *iou_spinbox_{};
 };
 #endif //__INC_AI_TEXT_TO_ANNOTATION_H

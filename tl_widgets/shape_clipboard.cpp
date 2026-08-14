@@ -1,20 +1,17 @@
 #include "shape_clipboard.h"
 
 
-ShapeClipboard::ShapeClipboard(QObject *parent) {
-//    super().__init__(parent)
-//    self._buffer: tuple[Shape, ...] = ()
+ShapeClipboard::ShapeClipboard(QObject *parent) : QObject(parent) {
 }
 
-void ShapeClipboard::store(QList<TlShape> &shapes) {
-//    snapshot = tuple(shape.copy() for shape in shapes)
-//    had_content = bool(self._buffer)
-//    self._buffer = snapshot
-//    if had_content != bool(snapshot):
-//        self.availability_changed.emit(bool(snapshot))
+void ShapeClipboard::store(const QList<TlShape> &shapes) {
+    const QList<TlShape> snapshot = shapes | std::views::transform([](auto &s) { return s.copy(); }) | std::ranges::to<QList<TlShape>>();
+    const auto had_content = !this->buffer_.empty();
+    this->buffer_ = snapshot;
+    if (had_content != !snapshot.empty())
+        emit this->availability_changed(!snapshot.empty());
 }
 
-QList<TlShape> ShapeClipboard::paste() {
-//    return [shape.copy() for shape in self._buffer]
-    return {};
+QList<TlShape> ShapeClipboard::paste() const {
+    return this->buffer_ | std::views::transform([](auto &s) { return s.clone(); }) | std::ranges::to<QList<TlShape>>();
 }

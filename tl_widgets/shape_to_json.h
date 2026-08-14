@@ -2,6 +2,7 @@
 #define __INC_SHAPE_TO_JSON_H
 
 #include "tl_shape.h"
+#include "tl_label_file.h"
 #include "nlohmann/json.hpp"
 
 
@@ -19,6 +20,13 @@ void from_json(const nlohmann::ordered_json &json, QString &value);
 
 void to_json(nlohmann::ordered_json &json, const TlShape &shape);
 void from_json(const nlohmann::ordered_json &json, TlShape &shape);
+
+
+void to_json(nlohmann::json &json, const ShapeDict &shape);
+void from_json(const nlohmann::json &json, ShapeDict &shape);
+
+void to_json(nlohmann::ordered_json &json, const ShapeDict &shape);
+void from_json(const nlohmann::ordered_json &json, ShapeDict &shape);
 
 } //namespace nlohmann
 #endif //__INC_SHAPE_TO_JSON_H

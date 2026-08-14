@@ -2,51 +2,47 @@
 #include "shape_render.h"
 
 
-HitTarget::operator bool() const {
-    return this->kind != HitKind::INVALID && this->shape && this->index != -1;
-}
-
 HitTarget find_hover_target(
     const QList<TlShape> &shapes,
     const QPointF &point,
-    float scale,
-    float epsilon,
-    int32_t point_size,
-    const TlShape &priority_shape
+    const float scale,
+    const float epsilon,
+    const int32_t point_size,
+    const int32_t priority_shape
 ) {
     const auto candidates = build_candidates(
         shapes,
         priority_shape
     );
 
-    // Pass 1: vertex proximity
+    // Pass 1: vertex proximity : 顶点邻近度
     for (const auto &shape : candidates) {
         const auto idx = nearest_vertex_index(
-            shape, point, scale, epsilon
+            shapes[shape], point, scale, epsilon
         );
         if (idx != None)
             return HitTarget{.kind=HitKind::VERTEX, .shape=shape, .index=idx};
     }
-    // Pass 2: rotation handle proximity
+    // Pass 2: rotation handle proximity : 旋转手柄邻近度
     for (const auto &shape : candidates) {
         const auto idx = nearest_rotation_point_index(
-            shape, point, scale, epsilon
+            shapes[shape], point, scale, epsilon
         );
         if (idx != None)
             return HitTarget{.kind=HitKind::ROTATION_HANDLE, .shape=shape, .index=idx};
     }
-    // Pass 3: edge proximity (only shapes that support adding a point)
+    // Pass 3: edge proximity (only shapes that support adding a point) : 边缘接近度(仅适用于支持添加点的形状)
     for (const auto &shape : candidates) {
-        if (!shape.can_add_point())
+        if (!shapes[shape].can_add_point())
             continue;
-        const auto idx = nearest_edge_index(shape, point, scale, epsilon);
+        const auto idx = nearest_edge_index(shapes[shape], point, scale, epsilon);
         if (idx != None)
             return HitTarget{.kind=HitKind::EDGE, .shape=shape, .index=idx};
     }
-    // Pass 4: body hit
+    // Pass 4: body hit : 主体命中
     for (const auto &shape : candidates) {
         const auto hit = is_hit_by_point(
-            shape,
+            shapes[shape],
             point,
             scale,
             point_size,
@@ -58,19 +54,19 @@ HitTarget find_hover_target(
     return {};
 }
 
-QList<TlShape> build_candidates(
+QList<int32_t> build_candidates(
     const QList<TlShape> &shapes,
-    const TlShape &priority_shape
+    const int32_t priority_shape
 ) {
-    QList<TlShape> candidates;
-    if (priority_shape && priority_shape.visible_)
+    QList<int32_t> candidates;
+    if (priority_shape != None && shapes[priority_shape].visible_)
         candidates.append(priority_shape);
-    for (auto &shape : shapes | std::views::reverse) {
+    for (auto &&[index, shape] : shapes | std::views::enumerate | std::views::reverse) {
         if (!shape.visible_)
             continue;
-        if (shape == priority_shape)
+        if (index == priority_shape)
             continue;
-        candidates.append(shape);
+        candidates.append(index);
     }
     return candidates;
 }

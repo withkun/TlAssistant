@@ -18,7 +18,7 @@
 #include "tl_widgets/status_stats.h"
 #include "tl_widgets/shape_clipboard.h"
 #include "tl_modules/ai_assist_annotation.h"
-#include "tl_modules/ai_text_to_annotation.h"
+#include "tl_modules/ai_prompt_annotation.h"
 #include "yaml-cpp/yaml.h"
 
 
@@ -139,7 +139,6 @@ protected:
 
 private:
     Ui::MainWindow                                 *ui_{};
-    MainWindow                                     &self;
 
     QString                                         config_file_;
     YAML::Node                                      config_;
@@ -173,13 +172,13 @@ private:
     QString                                         prev_image_path_;
     QByteArray                                      imageData_;
     QByteArray                                      other_data_;
-    std::unique_ptr<LabelFile>                      label_file_path_;
+    QString                                         label_file_path_;
 
     std::string                                     sam_model_name_{"efficientsam:latest"};
     std::unique_ptr<SamSession>                     text_osam_session_{};
 
     AiAssistAnnotation                             *ai_assist_annotation_{};
-    AiTextToAnnotation                             *ai_text_to_annotation_{};
+    AiPromptAnnotation                             *ai_prompt_annotation_{};
     QProgressDialog                                *progress_dialog_{};
     bool                                            ai_buttons_highlighted_{false};
 
@@ -219,15 +218,15 @@ private:
     void on_file_search_changed();
     void file_list_item_selection_changed();
     void on_shape_selection_changed(const QList<int32_t> &selected_shapes);
-    void add_label(TlShape &shape);
+    void add_label(const TlShape &shape);
     std::vector<int32_t> get_rgb_by_label(const QString &label, LabelList *unique_label_list);
     void remove_labels(const QList<TlShape> &shapes);
-    void load_shapes(QList<TlShape> &shapes, bool replace=true);
+    void load_shapes(const QList<TlShape> &shapes, bool replace=true);
     void load_flags(const YAML::Node &flags, QListWidget *widget) const;
     bool save_labels(const QString &label_path);
     void insert_shapes(const QList<TlShape> &shapes);
     void label_selection_changed();
-    void on_label_item_changed(const ShapeListItem *item);
+    void on_label_item_changed(ShapeListItem *item);
     void on_label_order_changed();
     void on_new_shape();
     void on_inference_produced_no_shapes();
@@ -303,13 +302,7 @@ private:
     static ShapeDict shape_to_dict(const TlShape &shape);
     static QStringList scan_image_files(const QString &root_dir);
 
-
-    QListWidgetItem *current_item();
-    void update_shape_color(TlShape &shape);
-    void enableKeepPrevScale(bool enabled);
-    void load_shape_dicts(const QList<ShapeDict> &shapes);
-    void duplicateSelectedShape();
-    void copySelectedShape();
+    QListWidgetItem *current_item() const;
 
 
 private slots:

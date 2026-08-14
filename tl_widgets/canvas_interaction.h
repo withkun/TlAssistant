@@ -6,24 +6,26 @@
 
 
 enum class HitKind : int32_t {
-    VERTEX,             // "vertex"
-    ROTATION_HANDLE,    // "rotation_handle"
-    EDGE,               // "edge"
-    BODY,               // "body"
-    INVALID,            //
+    INVALID,            // uninitialized
+    VERTEX,             // vertex
+    ROTATION_HANDLE,    // rotation_handle
+    EDGE,               // edge
+    BODY,               // body
 };
 
 struct HitTarget {
-    HitKind kind{HitKind::INVALID};
-    TlShape shape;
-    int32_t index{-1};
+    HitKind kind{};
+    int32_t shape{None};
+    int32_t index{None};
 
-    explicit operator bool() const;
+    explicit operator bool() const {
+        return !(this->kind == HitKind::INVALID && this->shape == None && this->index == None);
+    }
 };
 
-HitTarget find_hover_target(const QList<TlShape> &shapes, const QPointF &point, float scale, float epsilon, int32_t point_size, const TlShape &priority_shape);
+HitTarget find_hover_target(const QList<TlShape> &shapes, const QPointF &point, float scale, float epsilon, int32_t point_size, int32_t priority_shape);
 
-QList<TlShape> build_candidates(const QList<TlShape> &shapes, const TlShape &priority_shape);
+QList<int32_t> build_candidates(const QList<TlShape> &shapes, int32_t priority_shape);
 
 bool is_within_pick_threshold(const QPointF &a, const QPointF &b, float scale, float epsilon);
 

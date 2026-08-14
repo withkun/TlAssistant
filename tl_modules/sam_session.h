@@ -15,7 +15,7 @@ public:
                          const std::vector<cv::Point2f> &point_coords, const std::vector<float> &point_labels,
                          const std::vector<std::string> &texts = {});
 
-    [[nodiscard]] std::string model_name() const { return model_name_; }
+    std::string model_name() const { return model_name_; }
 
 protected:
     ImageEmbedding get_or_compute_embedding(const cv::Mat &image, size_t image_id);

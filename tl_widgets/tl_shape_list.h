@@ -31,7 +31,7 @@ public:
     ShapeListItem(const QString &text, const TlShape &shape);
 
     ShapeListItem *clone() const override;
-    void setShape(const TlShape &shape);
+    void set_shape(const TlShape &shape);
     TlShape shape() const;
 
 private:
@@ -80,6 +80,7 @@ public:
     void itemSelectionChangedEvent(const QItemSelection &selected, const QItemSelection &deselect);
     void itemDoubleClickedEvent(const QModelIndex &index);
     QList<ShapeListItem *> selected_items();
+    QList<ShapeListItem *> selection_at_press();
     void scroll_to_item(ShapeListItem *item);
     void add_item(ShapeListItem *item);
     void removeItem(ShapeListItem *item);

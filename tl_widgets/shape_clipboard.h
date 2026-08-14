@@ -10,9 +10,8 @@ class ShapeClipboard : public QObject {
 public:
     ShapeClipboard(QObject *parent = nullptr);
 
-    void store(QList<TlShape> &shapes);
-
-    QList<TlShape> paste();
+    void store(const QList<TlShape> &shapes);
+    QList<TlShape> paste() const;
 
 signals:
     void availability_changed(bool changed);

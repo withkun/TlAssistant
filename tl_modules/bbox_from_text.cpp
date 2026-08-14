@@ -152,7 +152,7 @@ void get_bboxes_from_texts(
 
 QList<TlShape> get_shapes_from_texts(
     SamSession *sam_session,
-    const cv::Mat &image, size_t image_id, const std::vector<std::string> &texts
+    const cv::Mat &image, const size_t image_id, const std::vector<std::string> &texts
 ) {
     // 这里需要加载模型与图像编码耗时较长, 需要防止GUI界面假死.
     //const GenerateResponse response = sam_session->run(image, image_id, {}, {}, texts);
@@ -166,11 +166,10 @@ QList<TlShape> get_shapes_from_texts(
 
     QList<TlShape> shapes;
     for (const auto &&[index, annotation] : response.annotations | std::views::enumerate) {
-        shapes.push_back({});
-        auto &shape = shapes.back();
+        auto &shape = shapes.emplace_back();
         QString label = QString::fromStdString(annotation.text.empty() ? texts.front() : annotation.text);
         shape.label_ = QString("%1_%2").arg(label).arg(100+index, 3, 10, '0');
-        shape.close();
+        shape.closed_ = true;
         if (annotation.mask.empty()) {
             shape.shape_type_ = "rectangle";
             shape.points_ = {QPointF(annotation.bbox.x1, annotation.bbox.y1), QPointF(annotation.bbox.x2, annotation.bbox.y2)};

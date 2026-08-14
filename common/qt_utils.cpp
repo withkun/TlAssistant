@@ -27,7 +27,7 @@ std::vector<QColor> label_colormap() {
         const uint8_t r = (b0 << 7) | (b3 << 6) | (b6 << 5);
         const uint8_t g = (b1 << 7) | (b4 << 6) | (b7 << 5);
         const uint8_t b = (b2 << 7) | (b5 << 6);
-        colormap[i] = QColor(r, g, b);
+        colormap[i] = {r, g, b};
     }
     return colormap;
 }
@@ -112,17 +112,14 @@ QString utils::format_shortcut(const QString &text) {
 }
 
 double utils::direction_angle(const QPointF &start, const QPointF &end) {
-    // 2. 计算差值: delta = end - start
-    double dx = end.x() - start.x();
-    double dy = end.y() - start.y();
-    // 3. 计算 atan2(dy, dx)
-    return std::atan2(dy, dx);
+    const auto delta = end - start;
+    return std::atan2(delta.y(), delta.x());
 }
 
 QPointF utils::project_point_on_line(
-    QPointF point,
-    QPointF line_start,
-    QPointF line_end
+    const QPointF &point,
+    const QPointF &line_start,
+    const QPointF &line_end
 ) {
     const auto dx = line_end.x() - line_start.x();
     const auto dy = line_end.y() - line_start.y();
@@ -136,9 +133,9 @@ QPointF utils::project_point_on_line(
 }
 
 QPointF utils::project_point_on_perpendicular_line(
-    QPointF point,
-    QPointF line_start,
-    QPointF line_end
+    const QPointF &point,
+    const QPointF &line_start,
+    const QPointF &line_end
 ) {
     // The perpendicular line passes through line_end and is orthogonal to
     // the vector (line_end - line_start).
@@ -173,9 +170,9 @@ static double pnt_to_line(const QPointF &point, const QLineF &line) {
     std::vector<double> AP = {point.x() - line.x1(), point.y() - line.y1()};
     std::vector<double> BP = {point.x() - line.x2(), point.y() - line.y2()};
 
-    double M_AP = mod(AP);
-    double M_BP = mod(BP);
-    double AP_BP = dot(AP, BP);
+    const double M_AP = mod(AP);
+    const double M_BP = mod(BP);
+    const double AP_BP = dot(AP, BP);
     return std::sqrt((M_AP * M_BP) / (line.y1() - line.x1() * AP_BP + 0.0001));
 }
 
@@ -382,35 +379,11 @@ cv::Rect utils::masks_to_bboxes(const cv::Mat &mask) {
     return cv::boundingRect(contours[max_len_idx]);
 }
 
-std::vector<cv::Rect> utils::masks_to_bboxes1(const std::vector<cv::Mat> &masks) {
+std::vector<cv::Rect> utils::masks_to_bboxes(const std::vector<cv::Mat> &masks) {
     std::vector<cv::Rect> bboxes;
     bboxes.reserve(masks.size());
-
     for (const cv::Mat &mask : masks) {
-        if (mask.empty() || cv::countNonZero(mask) == 0) {
-            bboxes.emplace_back(0, 0, 0, 0); // 空掩膜返回零矩形
-            continue;
-        }
-
-        cv::Mat points;
-        cv::findNonZero(mask, points); // 获取非零像素坐标
-
-        int32_t xmin = points.at<cv::Point>(0).x;
-        int32_t xmax = xmin;
-        int32_t ymin = points.at<cv::Point>(0).y;
-        int32_t ymax = ymin;
-        for (int32_t i = 1; i < points.rows; ++i) {
-            cv::Point p = points.at<cv::Point>(i);
-            xmin = std::min(xmin, p.x);
-            xmax = std::max(xmax, p.x);
-            ymin = std::min(ymin, p.y);
-            ymax = std::max(ymax, p.y);
-        }
-
-        // 构造包含边界的矩形
-        int32_t width  = xmax - xmin + 1;
-        int32_t height = ymax - ymin + 1;
-        bboxes.emplace_back(xmin, ymin, width, height);
+        bboxes.emplace_back(masks_to_bboxes(mask));
     }
     return bboxes;
 }

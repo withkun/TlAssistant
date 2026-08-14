@@ -11,8 +11,7 @@
 #include <QStandardItemModel>
 
 
-namespace {
-std::vector<std::pair<QString, QString>> available_models_{
+static const std::vector<std::pair<QString, QString>> available_models_{
     {"efficientsam:10m", "EfficientSam (speed)"},
     {"efficientsam:latest", "EfficientSam (accuracy)"},
     {"sam:100m", "Sam (speed)"},
@@ -23,22 +22,24 @@ std::vector<std::pair<QString, QString>> available_models_{
     {"sam2:large", "Sam2 (accuracy)"},
     {"sam3:latest", "Sam3"},
 };
+
+AiAssistAnnotation::AiAssistAnnotation(
+    const QString &default_model,
+    const std::function<void(const std::string &n)> &on_model_changed,
+    const std::function<void(const std::string &n)> &on_output_format_changed,
+    QWidget *parent) : QWidget(parent) {
+    this->init_ui(
+        default_model,
+        on_model_changed,
+        on_output_format_changed
+    );
 }
 
-AiAssistAnnotation::AiAssistAnnotation(const QString &default_model,
-                                       const std::function<void(const std::string &n)> &on_model_changed,
-                                       const std::function<void(const std::string &n)> &on_output_format_changed,
-                                       QWidget *parent)
-    : QWidget(parent) {
-    init_ui(default_model, on_model_changed, on_output_format_changed);
-}
-
-AiAssistAnnotation::~AiAssistAnnotation() {
-}
+AiAssistAnnotation::~AiAssistAnnotation() = default;
 
 //@property
 QString AiAssistAnnotation::output_format() {
-    return output_format_combo_->currentData().toString();
+    return this->output_format_combo_->currentData().toString();
 }
 
 void AiAssistAnnotation::init_ui(
@@ -70,22 +71,24 @@ void AiAssistAnnotation::init_ui(
     body_layout->setSpacing(0);
     body_->setLayout(body_layout);
 
-    model_combo_ = new QComboBox();
+    this->model_combo_ = new QComboBox();
     for (auto &[model_id, model_display] : available_models_) {
-        model_combo_->addItem(model_display, model_id);
+        this->model_combo_->addItem(model_display, model_id);
     }
-    body_layout->addWidget(model_combo_);
+    body_layout->addWidget(this->model_combo_);
 
-    output_format_combo_ = new QComboBox();
-    output_format_combo_->addItem("Polygon", "polygon");
-    output_format_combo_->addItem("Mask", "mask");
-    body_layout->addWidget(output_format_combo_);
+    this->output_format_combo_ = new QComboBox();
+    this->output_format_combo_->addItem("Polygon", "polygon");
+    this->output_format_combo_->addItem("Mask", "mask");
+    this->output_format_combo_->addItem("Rectangle", "rectangle");
+    this->output_format_combo_->addItem("Oriented Rectangle", "oriented_rectangle");
+    this->output_format_combo_->addItem("Circle", "circle");
+    body_layout->addWidget(this->output_format_combo_);
 
     layout->addWidget(body_);
 
     int32_t model_index;
-    QList<QString> model_ui_names;
-    std::ranges::for_each(available_models_, [&](auto &it) { model_ui_names.append(it.first); });
+    const auto model_ui_names = available_models_ | std::views::transform([](auto &p) { return p.first; }) | std::ranges::to<QList<QString>>();
     if (model_ui_names.contains(default_model)) {
         model_index = model_ui_names.indexOf(default_model);
     } else {
@@ -93,42 +96,42 @@ void AiAssistAnnotation::init_ui(
         model_index = 0;
     }
 
-    QObject::connect(model_combo_, &QComboBox::currentIndexChanged, [this, on_model_changed](int index) {
-        const QString model_name = model_combo_->itemData(index).toString();
+    QObject::connect(this->model_combo_, &QComboBox::currentIndexChanged, [this, on_model_changed](int index) {
+        const QString model_name = this->model_combo_->itemData(index).toString();
         on_model_changed(model_name.toStdString());
     });
-    model_combo_->setCurrentIndex(model_index);
+    this->model_combo_->setCurrentIndex(model_index);
 
-    QObject::connect(output_format_combo_, &QComboBox::currentIndexChanged, [this, on_output_format_changed](int index) {
-        const QString model_name = output_format_combo_->itemData(index).toString();
+    QObject::connect(this->output_format_combo_, &QComboBox::currentIndexChanged, [this, on_output_format_changed](int index) {
+        const QString model_name = this->output_format_combo_->itemData(index).toString();
         on_output_format_changed(model_name.toStdString());
     });
-    output_format_combo_->setCurrentIndex(0);
+    this->output_format_combo_->setCurrentIndex(0);
 
-    setMaximumWidth(200);
+    this->setMaximumWidth(200);
 }
 
 void AiAssistAnnotation::set_disabled_models(const QList<QString> &disabled_models) {
-    QStandardItemModel *model = static_cast<QStandardItemModel *>(model_combo_->model());
-    for (int32_t i = 0; i < model_combo_->count(); ++i) {
-        auto model_id = model_combo_->itemData(i);
+    QStandardItemModel *model = static_cast<QStandardItemModel *>(this->model_combo_->model());
+    for (int32_t i = 0; i < this->model_combo_->count(); ++i) {
+        auto model_id = this->model_combo_->itemData(i);
         auto item = model->item(i);
         //assert item is not None
         if (disabled_models.contains(model_id)) {
-            item->setFlags(item->flags() & ~Qt::ItemIsEnabled);
+            item->setFlags(item->flags() & ~Qt::ItemFlag::ItemIsEnabled);
         } else
-            item->setFlags(item->flags() | Qt::ItemIsEnabled);
+            item->setFlags(item->flags() | Qt::ItemFlag::ItemIsEnabled);
     }
 }
 
 void AiAssistAnnotation::setEnabled(bool a0) {
-    body_->setEnabled(a0);
-    emit hover_highlight_requested(false);
+    this->body_->setEnabled(a0);
+    emit this->hover_highlight_requested(false);
 }
 
 bool AiAssistAnnotation::eventFilter(QObject *a0, QEvent *a1) {
-    if (a0 == body_ && !body_->isEnabled()) {
-        if (a1->type() == QEvent::Enter) {
+    if (a0 == this->body_ && !this->body_->isEnabled()) {
+        if (a1->type() == QEvent::Type::Enter) {
             QToolTip::showText(
                 QCursor::pos(),
                 tr(
@@ -137,9 +140,9 @@ bool AiAssistAnnotation::eventFilter(QObject *a0, QEvent *a1) {
                 ),
                 body_
             );
-            emit hover_highlight_requested(true);
-        } else if (a1->type() == QEvent::Leave) {
-            emit hover_highlight_requested(false);
+            emit this->hover_highlight_requested(true);
+        } else if (a1->type() == QEvent::Type::Leave) {
+            emit this->hover_highlight_requested(false);
         }
     }
     return QWidget::eventFilter(a0, a1);

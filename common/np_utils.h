@@ -3,7 +3,7 @@
 
 #include <vector>
 #include <algorithm>
-#include "opencv2/opencv.hpp"
+#include "qt_utils.h"
 
 
 namespace np {
@@ -31,6 +31,34 @@ cv::Point_<T> clip(const cv::Point_<T> &v, const cv::Point_<T> &lower, const cv:
     const auto x = std::min(std::max(v.x, lower.x), upper.x);
     const auto y = std::min(std::max(v.y, lower.y), upper.y);
     return cv::Point_<T>{x, y};
+}
+
+template<typename T>
+QList<T> roll(const QList<T> &vec, int32_t shift) {
+    if (vec.empty()) return vec;
+
+    const int32_t num = vec.size();
+    shift = shift % num;
+    if (shift < 0) { shift += num; }
+    if (shift == 0) { return vec; }
+
+    QList<T> rslt = vec;
+    std::rotate(rslt.begin(), rslt.begin() + (num - shift), rslt.end());
+    return rslt;
+}
+
+template<typename T>
+int32_t argmin(const std::vector<T> &vec) {
+    if (vec.empty()) return None; // 处理空容器异常
+    const auto min_it = std::min_element(vec.begin(), vec.end());
+    return static_cast<int32_t>(std::distance(vec.begin(), min_it));
+}
+
+template<typename T>
+int32_t argmin(const QList<T> &vec) {
+    if (vec.empty()) return None; // 处理空容器异常
+    const auto min_it = std::min_element(vec.begin(), vec.end());
+    return static_cast<int32_t>(std::distance(vec.begin(), min_it));
 }
 
 template<typename T>

@@ -28,20 +28,6 @@ QMap<QString, bool> validate_flags(const nlohmann::json &flags) {
     return dict;
 }
 
-QString LabelFile::suffix = ".json";
-
-const QString LABEL_FILE_SUFFIX = ".json";
-
-const QSet<QString> RESERVED_TOP_LEVEL_KEYS = {
-    "version",
-    "imageData",
-    "imagePath",
-    "shapes",       // polygonal annotations
-    "flags",        // image level flags
-    "imageHeight",
-    "imageWidth",
-};
-
 ShapeDict load_shape_json_obj(const nlohmann::json &shape_json_obj) {
     std::set<std::string> SHAPE_KEYS = {
         "label",
@@ -94,17 +80,7 @@ ShapeDict load_shape_json_obj(const nlohmann::json &shape_json_obj) {
     }
     QString shape_type = QString::fromStdString(shape_json_obj["shape_type"].get<std::string>());
 
-    QMap<QString, bool> flags; //: dict = {}
-    //if (shape_json_obj.contains("flags") && !shape_json_obj["flags"].is_null()) {
-    //    assert isinstance(shape_json_obj["flags"], dict), (
-    //        f"flags must be dict: {shape_json_obj['flags']}"
-    //    )
-    //    assert all(
-    //        isinstance(k, str) and isinstance(v, bool)
-    //        for k, v in shape_json_obj["flags"].items()
-    //    ), f"flags must be dict of str to bool: {shape_json_obj['flags']}"
-    //    flags = shape_json_obj["flags"]
-    //}
+    QMap<QString, bool> flags = validate_flags(shape_json_obj["flags"]);
 
     QString description;
     if (shape_json_obj.contains("description") && !shape_json_obj["description"].is_null()) {
@@ -134,24 +110,23 @@ ShapeDict load_shape_json_obj(const nlohmann::json &shape_json_obj) {
         mask = utils::img_b64_to_arr(shape_json_obj["mask"]);
     }
 
-    QMap<QString, QString> other_data; // = {k: v for k, v in shape_json_obj.items() if k not in SHAPE_KEYS}
+    QMap<QString, QByteArray> other_data; // = {k: v for k, v in shape_json_obj.items() if k not in SHAPE_KEYS}
     for (const auto &it : shape_json_obj.items()) {
         if (SHAPE_KEYS.contains(it.key())) {
             continue;
         }
-
         //loaded.other_data[it.key()] = it.value();
     }
 
     ShapeDict loaded{
-        label,
-        points,
-        shape_type,
-        flags,
-        description,
-        group_id,
-        mask,
-        other_data,
+        .label_=label,
+        .points_=points,
+        .shape_type_=shape_type,
+        .flags_=flags,
+        .description_=description,
+        .group_id_=group_id,
+        .mask_=mask,
+        .other_data_=other_data,
     };
     //assert set(loaded.keys()) == SHAPE_KEYS | {"other_data"}
     return loaded;
@@ -173,216 +148,27 @@ nlohmann::ordered_json dump_shape_to_json_obj(const ShapeDict &shape) { // -> di
     return json_obj;
 }
 
-LabelFile::LabelFile(const QString &filename) {
-    shapes_ = {};
-    imagePath_ = {};
-    imageData_ = {};
-    if (!filename.isEmpty()) {
-        load(filename);
-    }
-    filename_ = filename;
-}
+const QString LABEL_FILE_SUFFIX = ".json";
 
-//@staticmethod
-QByteArray LabelFile::load_image_file(const QString &filename) {
-    QByteArray imageData;
-    try {
-        QImage image;
-        image.load(filename);
+const QSet<QString> RESERVED_TOP_LEVEL_KEYS = {
+    "version",
+    "imageData",
+    "imagePath",
+    "shapes",
+    "flags",
+    "imageHeight",
+    "imageWidth",
+};
 
-        std::string format("PNG");
-        QFileInfo fileInfo(filename);
-        if ((fileInfo.filesystemPath().extension() == ".jpg") || (fileInfo.filesystemPath().extension() == ".jpeg")) {
-            format = "JPEG";
-        }
-        QBuffer buffer(&imageData);
-        buffer.open(QIODevice::WriteOnly);
-        image.save(&buffer, format.data());
-    } catch (...) {
-        SPDLOG_ERROR("Failed opening image file: {}", filename);
-    }
-
-    return imageData;
-}
-
-void LabelFile::load(const QString &filename) {
-    QString    imagePath;
-    QByteArray imageData;
-    try {
-        std::ifstream ifs(filename.toLocal8Bit());
-        if (!ifs.is_open()) {
-            return;
-        }
-        nlohmann::json data;
-        ifs >> data;
-        ifs.close();
-
-        // Normalize Windows-style backslash paths to POSIX forward slashes
-        if (data.contains("imagePath") && data["imagePath"].is_string()) {
-            imagePath = QString::fromStdString(data["imagePath"].get<std::string>());
-        }
-
-        if (data.contains("imageData") && !data["imageData"].is_null() && !data["imageData"].get<std::string>().empty()) {
-            imageData = QByteArray::fromStdString(base64::b64decode(data["imageData"].get<std::string>()));
-        } else {
-            // relative path from label file to relative path from cwd
-            imageData = load_image_file(QFileInfo(filename).absolutePath() + "/" +  imagePath);
-        }
-
-        std::string flags;
-        if (data.contains("flags")) {
-            //flags = data["flags"];  // {}对象类型, 暂时未知.
-        }
-
-        check_image_height_and_width(
-            imageData,
-            data["imageHeight"].get<int32_t>(),
-            data["imageWidth"].get<int32_t>()
-        );
-
-        for (const auto &item : data["shapes"].items()) {
-            const auto &s = item.value();
-            try {
-                auto shape = s.get<TlShape>();
-                shapes_.push_back(shape);
-            } catch (const std::exception &e) {
-                std::cerr << e.what() << std::endl;
-                throw;
-            }
-
-            try {
-                shapes1_.push_back(load_shape_json_obj(item.value()));
-            } catch (const std::exception &e) {
-                std::cerr << e.what() << std::endl;
-                throw;
-            }
-        }
-    } catch (const std::exception &e) {
-        throw LabelFileError();
-    }
-
-    //otherData = {}
-    //for (key, value in data.items()) {
-    //    if (key not in RESERVED_TOP_LEVEL_KEYS) {
-    //        otherData[key] = value;
-    //    }
-    //}
-    // Only replace data after everything is loaded.
-    //flags_ = flags;
-    //shapes_ = shapes;
-    imagePath_ = imagePath;
-    imageData_ = imageData;
-    filename_  = filename;
-    //otherData_ = otherData;
-}
-
-//@staticmethod
-std::pair<int32_t, int32_t> LabelFile::check_image_height_and_width(const QByteArray &imageData, int32_t imageHeight, int32_t imageWidth) {
-    const auto image = QImage::fromData((uchar *)imageData.data(), imageData.size());
-    int32_t actual_w = image.width(), actual_h = image.height();
-    if (imageHeight != -1 &&  actual_h != imageHeight) {
-        SPDLOG_ERROR(
-            "imageHeight does not match with imageData or imagePath, "
-            "so getting imageHeight from actual image."
-        );
-        imageHeight = actual_h;
-    }
-    if (imageWidth != -1 && actual_w != imageWidth) {
-        SPDLOG_ERROR(
-            "imageWidth does not match with imageData or imagePath, "
-            "so getting imageWidth from actual image."
-        );
-        imageWidth = actual_w;
-    }
-    return {imageHeight, imageWidth};
-}
-
-void LabelFile::save(const QString &filename,
-                     const QList<TlShape> &shapes,
-                     const QString &imagePath,
-                     const QByteArray &imageData,
-                     int32_t imageHeight,
-                     int32_t imageWidth,
-                     const QString &otherData,
-                     const QMap<QString, bool> &flags) {
-    std::string imageBase64;
-    if (!imageData.isEmpty()) {
-        imageBase64 = base64::b64encode(imageData);
-        auto [fst, snd] = check_image_height_and_width(imageData, imageHeight, imageWidth);
-        imageHeight = fst;
-        imageWidth = snd;
-    }
-    //if (otherData is None) {
-    //    otherData = {};
-    //}
-    //if (flags is None) {
-    //    flags = {};
-    //}
-
-    std::vector<TlShape> pnt_list(shapes.begin(), shapes.end());
-
-    nlohmann::ordered_json data;
-    data["version"]     = "5.11.4";
-
-    data["flags"]       = nlohmann::json({}); //flags;
-    data["shapes"]      = pnt_list;
-    data["imagePath"]   = imagePath;
-    if (imageBase64.empty()) {
-        data["imageData"] = std::nullptr_t();
-    } else {
-        data["imageData"] = imageBase64;
-    }
-    data["imageHeight"] = imageHeight;
-    data["imageWidth"]  = imageWidth;
-
-    //for (key, value in otherData.items()) {
-    //    assert key not in data;
-    //    data[key] = value;
-    //}
-    try {
-        std::ofstream ofs(filename.toLocal8Bit());
-        if (ofs.is_open()) {
-            ofs.width(2);
-            ofs << data;
-            ofs.close();
-        }
-        filename_ = filename;
-    } catch (const std::exception &e) {
-        throw LabelFileError();
-    }
-}
 
 bool is_label_file_path(const QString &filename) {
     const std::filesystem::path fs(filename.toStdString());
     const auto extension = QString::fromStdString(fs.extension().string());      // 包含.的后缀, 如: .json
-    return extension.toLower() == LabelFile::suffix;
+    return extension.toLower() == LABEL_FILE_SUFFIX;
 }
 
 QByteArray read_image_file(const QString &filename) {
-    //t_start = time.time()
-    //image_pil = _imread(filename=filename)
-    //
-    //oriented: PIL.Image.Image = _utils.apply_exif_orientation(image=image_pil)
-    //ext = Path(filename).suffix.lower()
-    //if oriented is image_pil and ext in (".jpg", ".jpeg", ".png"):
-    //    with open(filename, "rb") as f:
-    //        image_data = f.read()
-    //else:
-    //    with io.BytesIO() as f:
-    //        fmt = "PNG" if "A" in oriented.mode else "JPEG"
-    //        oriented.save(fp=f, format=fmt, quality=95)
-    //        f.seek(0)
-    //        image_data = f.read()
-    //
-    //logger.debug(
-    //    "Loaded image file: {!r} in {:.0f}ms", filename, (time.time() - t_start) * 1000
-    //)
-    //return image_data
-    return {};
-}
-
-QByteArray load_image_file(const QString &filename) {
-    QByteArray imageData;
+    QByteArray image_data;
     try {
         QImage image;
         image.load(filename);
@@ -392,14 +178,13 @@ QByteArray load_image_file(const QString &filename) {
         if ((fileInfo.filesystemPath().extension() == ".jpg") || (fileInfo.filesystemPath().extension() == ".jpeg")) {
             format = "JPEG";
         }
-        QBuffer buffer(&imageData);
+        QBuffer buffer(&image_data);
         buffer.open(QIODevice::WriteOnly);
         image.save(&buffer, format.data());
     } catch (...) {
         SPDLOG_ERROR("Failed opening image file: {}", filename);
     }
-
-    return imageData;
+    return image_data;
 }
 
 void check_image_dimensions(
@@ -429,34 +214,26 @@ AnnotationEx read_label_file(const QString &filename) {
     QMap<QString, QByteArray>   other_data;
     try {
         std::ifstream ifs(filename.toLocal8Bit());
-        if (!ifs.is_open()) {
-            throw OSError("failed to load " + filename.toStdString());
-        }
         nlohmann::json raw;
         ifs >> raw;
         ifs.close();
 
-        // Normalize Windows-style backslash paths to POSIX forward slashes
-        if (raw.contains("imagePath") && raw["imagePath"].is_string()) {
-            image_path = QString::fromStdString(raw["imagePath"].get<std::string>());
-        }
-
+        image_path = QString::fromStdString(raw["imagePath"].get<std::string>());
         if (raw.contains("imageData") && !raw["imageData"].is_null() && !raw["imageData"].get<std::string>().empty()) {
             image_data = QByteArray::fromStdString(base64::b64decode(raw["imageData"].get<std::string>()));
         } else {
-            // relative path from label file to relative path from cwd
-            image_data = load_image_file(QFileInfo(filename).absolutePath() + "/" +  image_path);
+            image_data = read_image_file(
+                QFileInfo(filename).absolutePath() + "/" +  image_path
+            );
         }
-
         check_image_dimensions(
             image_data,
             raw["imageHeight"].get<int32_t>(),
             raw["imageWidth"].get<int32_t>()
         );
-
-        std::ranges::for_each(raw["shapes"].items(), [&](const auto &it) {
-            shapes.append(load_shape_json_obj(it.value()));
-        });
+        shapes = raw["shapes"].items() | std::views::transform([](auto &it) {
+            return load_shape_json_obj(it.value());
+        }) | std::ranges::to<QList<ShapeDict>>();
 
         flags = validate_flags(raw["flags"]);
     //except (
@@ -469,16 +246,14 @@ AnnotationEx read_label_file(const QString &filename) {
     } catch (...) {
         throw LabelFileReadError("failed to load " + filename.toStdString());
     }
-
-    //
     //other_data = {k: v for k, v in raw.items() if k not in RESERVED_TOP_LEVEL_KEYS}
-    return AnnotationEx(
-        image_path,
-        image_data,
-        shapes,
-        flags,
-        other_data
-    );
+    return AnnotationEx{
+        .image_path_=image_path,
+        .image_data_=image_data,
+        .shapes_=shapes,
+        .flags_=flags,
+        .other_data_=other_data,
+    };
 }
 
 void write_label_file(
@@ -486,7 +261,7 @@ void write_label_file(
     const AnnotationEx &annotation,
     int32_t image_height,
     int32_t image_width,
-    bool save_image_data
+    const bool save_image_data
 ) {
     try {
         std::string image_data_b64;
@@ -499,28 +274,31 @@ void write_label_file(
             image_data_b64 = base64::b64encode(annotation.image_data_);
         }
         // JSON keys stay camelCase: changing them would break existing .json files.
-        //std::vector<TlShape> pnt_list(annotation.shapes_.begin(), annotation.shapes_.end());
-        std::vector<TlShape> shapes;
-        std::for_each(annotation.shapes_.begin(), annotation.shapes_.end(), [](auto &shape) { });
         nlohmann::ordered_json payload = {
             {"version", _version_},
-            {"flags", nlohmann::json({})},    //dict(annotation.flags) if annotation.flags else {},
-            //shapes: [dump_shape_to_json_obj(shape) for shape in annotation.shapes],
+            {"flags", nlohmann::json({})},
+            {"shapes", std::vector<ShapeDict>{annotation.shapes_.begin(), annotation.shapes_.end()}},
             {"imagePath", annotation.image_path_},
-            {"imageData", image_data_b64},
+            {"imageData", std::nullptr_t()},
             {"imageHeight", image_height},
             {"imageWidth", image_width}
         };
-    //    for key, value in annotation.other_data.items():
-    //        if key in _RESERVED_TOP_LEVEL_KEYS:
-    //            raise ValueError(f"reserved key in other_data: {key!r}")
-    //        payload[key] = value
-    //    with open(filename, "w", encoding="utf-8") as f:
-    //        json.dump(payload, f, ensure_ascii=False, indent=2)
-    //} catch (OSError, TypeError, ValueError) as e: {
-    //    raise LabelFileWriteError(f"failed to write {filename!r}: {e}") from e
-    //}
+        if (!image_data_b64.empty()) {
+            payload["imageData"] = image_data_b64;
+        }
+        //for key, value in annotation.other_data.items():
+        //    if key in _RESERVED_TOP_LEVEL_KEYS:
+        //        raise ValueError(f"reserved key in other_data: {key!r}")
+        //    payload[key] = value
+        std::ofstream ofs(filename.toLocal8Bit());
+        if (ofs.is_open()) {
+            ofs.width(2);
+            ofs << payload;
+            ofs.close();
+        }
     } catch (const std::exception &e) {
         throw LabelFileReadError("failed to write " + filename.toStdString() + ": " + e.what());
     }
+    //except (OSError, TypeError, ValueError) as e:
+    //    raise LabelFileWriteError(f"failed to write {filename!r}: {e}") from e
 }

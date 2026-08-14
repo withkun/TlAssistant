@@ -140,14 +140,23 @@ set(AI_SOURCES
     tl_modules/sam_session.h
     tl_modules/sam_session.cpp
 
+    tl_assists/ai_assist_session.h
+    tl_assists/ai_assist_session.cpp
+    tl_assists/ai_assist_thread.h
+    tl_assists/ai_assist_thread.cpp
+    tl_assists/geometry.h
+    tl_assists/geometry.cpp
+    tl_assists/suppression.h
+    tl_assists/suppression.cpp
+    tl_assists/shape_builder.h
+    tl_assists/shape_builder.cpp
+
     tl_modules/info_button.h
     tl_modules/info_button.cpp
-    tl_modules/ai_assist_thread.h
-    tl_modules/ai_assist_thread.cpp
     tl_modules/ai_assist_annotation.h
     tl_modules/ai_assist_annotation.cpp
-    tl_modules/ai_text_to_annotation.h
-    tl_modules/ai_text_to_annotation.cpp
+    tl_modules/ai_prompt_annotation.h
+    tl_modules/ai_prompt_annotation.cpp
     tl_modules/bbox_from_text.h
     tl_modules/bbox_from_text.cpp
     tl_modules/polygon_from_mask.h
@@ -183,6 +192,7 @@ qt_add_translations(${PROJECT_NAME} TS_FILES
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/common
+    ${CMAKE_CURRENT_SOURCE_DIR}/tl_assists
     ${CMAKE_CURRENT_SOURCE_DIR}/tl_modules
     ${CMAKE_CURRENT_SOURCE_DIR}/tl_widgets
     ${CUDA_SDK_ROOT_DIR}/include
