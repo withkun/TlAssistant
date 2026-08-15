@@ -253,22 +253,3 @@ TlShape TlShape::clone() const {
     shape.uuid_ = QUuid::createUuid().toString();
     return shape;
 }
-
-TlShape::TlShape(const TlShape &shape) {
-    this->set_value(shape);
-}
-
-void TlShape::set_value(const TlShape &shape) {
-    this->label_                      = shape.label_;
-    this->group_id_                   = shape.group_id_;
-    this->points_                     = shape.points_;
-    this->point_labels_               = shape.point_labels_;
-    this->shape_type_                 = shape.shape_type_;
-    this->flags_                      = shape.flags_;
-    this->description_                = shape.description_;
-    this->other_data_                 = shape.other_data_;
-    this->mask_                       = shape.mask_;
-    this->closed_                     = shape.closed_;
-
-    this->uuid_                       = shape.uuid_;
-}

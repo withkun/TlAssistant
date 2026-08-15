@@ -8,8 +8,7 @@
 class LocalMask {
 public:
     cv::Mat         mask;
-    int32_t         origin_x{0};
-    int32_t         origin_y{0};
+    cv::Point       origin_xy;
     int32_t         area{0};
 
     explicit operator bool() const {

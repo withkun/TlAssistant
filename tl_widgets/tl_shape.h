@@ -34,6 +34,7 @@ public:
     bool                        visible_{true};
 
 private:
+    friend class Canvas;
     QString                     uuid_;
     void _post_init_();
 
@@ -48,18 +49,8 @@ public:
     TlShape copy() const;
     TlShape clone() const;
 
-    TlShape(const TlShape &shape);
-    void set_value(const TlShape &shape);
-
     QPointF &operator[](const int32_t index) {
         return (index >= 0) ?  points_[index] : points_[points_.size() + index];
-    }
-
-    TlShape &operator=(const TlShape &shape) {
-        if (this != &shape) {
-            set_value(shape);
-        }
-        return *this;
     }
 
     bool operator==(const TlShape &shape) const {

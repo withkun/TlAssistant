@@ -21,7 +21,7 @@ public:
     void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
     QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const override;
 
-    QSize default_size_hint();
+    static QSize default_size_hint();
 
 private:
     QTextDocument      *doc_{nullptr};
@@ -34,9 +34,6 @@ public:
     ShapeListItem *clone() const override;
     void set_shape(const TlShape &shape);
     TlShape shape() const;
-
-private:
-    void init_item(const QString &text);
 };
 
 // ShapeItemModel -> QStandardItemModel -> QAbstractItemModel -> QObject

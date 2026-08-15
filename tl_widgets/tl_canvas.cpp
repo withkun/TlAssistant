@@ -1865,7 +1865,7 @@ void Canvas::keyReleaseEvent(QKeyEvent *event) {
         ) {
             const auto index = this->selected_shapes_[0];
             if (
-                shape_backups_.back()[index].points_ != shapes_[index].points_
+                shape_backups_.back()[index].points_ != this->shapes_[index].points_
             ) {
                 this->backup_shapes();
                 emit this->shape_moved();
@@ -1977,10 +1977,13 @@ void Canvas::load_shapes(const QList<TlShape> &shapes, const bool replace) {
     this->update();
 }
 
-void Canvas::set_shape_visible(TlShape &shape, const bool value) {
-    if (shape.visible_ == value)
-        return;
-    shape.visible_ = value;
+void Canvas::set_shape_visible(const TlShape &shape, const bool value) {
+    for (auto &s : this->shapes_) {
+        if (s != shape) { continue; }
+        if (s.visible_ == value) { return; }
+        s.visible_ = value;
+        break;
+    }
     this->update();
 }
 
@@ -2226,12 +2229,13 @@ Canvas::~Canvas() {
 }
 
 void Canvas::update_shape_info(const TlShape &shape) {
-    for (auto &s : shapes_) {
+    for (auto &s : this->shapes_) {
         if (s == shape) {
             s.label_                = shape.label_;
             s.flags_                = shape.flags_;
             s.group_id_             = shape.group_id_;
             s.description_          = shape.description_;
+            return;
         }
     }
 }

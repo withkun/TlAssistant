@@ -303,6 +303,7 @@ private:
     static QStringList scan_image_files(const QString &root_dir);
 
     QListWidgetItem *current_item() const;
+    TlShape canvas_shape(const TlShape &shape) const;
 
 
 private slots:

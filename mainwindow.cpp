@@ -1394,14 +1394,13 @@ bool MainWindow::validate_label(const QString &label) {
 }
 
 void MainWindow::edit_label(bool value) {
-    QList<TlShape> shapes;
-    auto items = this->docks_.shape_list_->selected_items();
+    const auto items = this->docks_.shape_list_->selected_items();
     if (items.empty()) {
         SPDLOG_WARN("No label is selected, so cannot edit label.");
         return;
     }
 
-    std::ranges::for_each(items, [&](auto &it) { shapes.push_back(it->shape()); });
+    const auto shapes = items | std::views::transform([](const auto &item) { return item->shape(); }) | std::ranges::to<QList<TlShape>>();
     const auto first_shape = shapes[0];
 
     bool edit_text = true;
@@ -1429,12 +1428,12 @@ void MainWindow::edit_label(bool value) {
 
     const QPoint canvas_menu_origin = this->canvas_widgets_.canvas_->context_menu_origin_;
     const QPoint menu_origin = (
-        canvas_menu_origin != QPoint{} ?
+        !canvas_menu_origin.isNull() ?
             canvas_menu_origin :
             this->label_list_menu_origin_
     );
 
-    const auto [text, flags, group_id, description] = this->label_dialog_->popUp(
+    const auto [text, flags, group_id, description] = this->label_dialog_->popup(
         edit_text ? first_shape.label_ : "",
         menu_origin,
         edit_flags ? first_shape.flags_ : QMap<QString, bool>{},
@@ -1484,6 +1483,8 @@ void MainWindow::edit_label(bool value) {
             shape.description_ = description;
 
         // assert shape.label is not None
+        this->canvas_widgets_.canvas_->update_shape_info(shape);    // 由于保存的是对象, 更新回去.
+        item->set_shape(shape);                                     // 由于保存的是对象, 更新回去.
         item->setText(
             format_shape_label(
                 shape,
@@ -1493,7 +1494,6 @@ void MainWindow::edit_label(bool value) {
                 )
             )
         );
-        this->canvas_widgets_.canvas_->update_shape_info(shape);    // 由于保存的是对象, 先更新轮廓信息.
         this->mark_dirty();
         if (this->docks_.label_list_->find_label_item(shape.label_) == nullptr) {
             this->docks_.label_list_->add_label_item(
@@ -1529,7 +1529,7 @@ void MainWindow::on_shape_selection_changed(const QList<int32_t> &selected_shape
     );
     this->docks_.shape_list_->clearSelection();
     this->canvas_widgets_.canvas_->selected_shapes_ = selected_shapes;
-    for (auto &idx : this->canvas_widgets_.canvas_->selected_shapes_) {
+    for (const auto &idx : this->canvas_widgets_.canvas_->selected_shapes_) {
         const auto item = this->docks_.shape_list_->find_item_by_shape(this->canvas_widgets_.canvas_->shapes_[idx]);
         this->docks_.shape_list_->select_item(item);
         this->docks_.shape_list_->scroll_to_item(item);
@@ -1560,7 +1560,6 @@ void MainWindow::add_label(const TlShape &shape) {
     for (const auto &action : this->actions_.on_shapes_present_)
         action->setEnabled(true);
 
-    this->canvas_widgets_.canvas_->update_shape_info(shape);    // 由于保存的是对象, 先更新轮廓信息.
     shape_list_item->setText(
         format_shape_label(
             shape,
@@ -1645,10 +1644,11 @@ void MainWindow::load_flags(
 }
 
 bool MainWindow::save_labels(const QString &label_path) {
-    QList<ShapeDict> shapes = this->canvas_widgets_.canvas_->shapes_ | std::views::transform([](auto &s) {
+    const QList<ShapeDict> shapes = this->canvas_widgets_.canvas_->shapes_ | std::views::transform([](auto &s) {
         return shape_to_dict(s);
     }) | std::ranges::to<QList<ShapeDict>>();
-    QMap<QString, bool> flags = this->read_flag_dock_states();
+
+    const QMap<QString, bool> flags = this->read_flag_dock_states();
     try {
         //assert self._image_path
         //assert self._annotation is not None
@@ -1714,20 +1714,19 @@ void MainWindow::label_selection_changed() {
 void MainWindow::on_label_item_changed(ShapeListItem *item) {
     bool is_visible_new = item->checkState() == Qt::CheckState::Checked;
 
-    QList<ShapeListItem *> selected_group = (!this->docks_.shape_list_->selection_at_press().empty()
+    const QList<ShapeListItem *> selected_group = (!this->docks_.shape_list_->selection_at_press().empty()
         ? this->docks_.shape_list_->selection_at_press()
         : this->docks_.shape_list_->selected_items()
     );
-    QList<ShapeListItem *> items_to_toggle = (selected_group.contains(item) && selected_group.count() > 1
+    const QList<ShapeListItem *> items_to_toggle = (selected_group.contains(item) && selected_group.count() > 1
         ? selected_group
         : QList{ item }
     );
-    QList<ShapeListItem *> items_to_change;
-    for (auto &it : items_to_toggle) {
-        if (auto sh = it->shape(); sh && sh.visible_ != is_visible_new) {
-            items_to_change.push_back(it);
-        }
-    }
+    const QList<ShapeListItem *> items_to_change = items_to_toggle | std::views::filter([this, is_visible_new](const auto &item) {
+        const auto sh = this->canvas_shape(item->shape());
+        return (sh && sh.visible_ != is_visible_new);
+    }) | std::ranges::to<QList<ShapeListItem *>>();
+
     if (items_to_change.empty())
         return;
 
@@ -1750,18 +1749,18 @@ void MainWindow::on_label_item_changed(ShapeListItem *item) {
 }
 
 void MainWindow::on_label_order_changed() {
-    mark_dirty();
+    this->mark_dirty();
     // 不能且不需要重新加载, shape_list中保存的原始图形, 不包含锚点调整信息。
-    //QList<TlShape> shapes;
-    //QList<ShapeListItem *> items = shape_list_->items();
-    //std::ranges::transform(items, std::back_inserter(shapes), [](auto &item){ return item->shape(); });
-    //canvas_widgets_.canvas_->loadShapes(shapes);
+    //const auto shapes = this->docks_.shape_list_->items() | std::views::transform([this](const auto &item) {
+    //    return this->canvas_shape(item->shape());
+    //}) | std::ranges::to<QList<TlShape>>();
+    //this->canvas_widgets_.canvas_->load_shapes(shapes);
 }
 
 // Callback functions:
 
 void MainWindow::on_new_shape() {
-    auto items = this->docks_.label_list_->selectedItems();
+    const auto items = this->docks_.label_list_->selectedItems();
     QString text;
     if (!items.isEmpty()) {
         text = items[0]->data(Qt::ItemDataRole::UserRole).toString();
@@ -1771,7 +1770,7 @@ void MainWindow::on_new_shape() {
     QString description;
     if (this->config_["display_label_popup"].as<bool>() || text.isEmpty()) {
         const QString previous_text = this->label_dialog_->edit_->text();
-        std::tie(text, flags, group_id, description) = this->label_dialog_->popUp(text);
+        std::tie(text, flags, group_id, description) = this->label_dialog_->popup(text);
         if (text.isEmpty()) {
             this->label_dialog_->edit_->setText(previous_text);
         }
@@ -1812,7 +1811,7 @@ void MainWindow::on_inference_produced_no_shapes() {
 }
 
 void MainWindow::on_inference_failed(const QString &message) {
-    this->show_status_message(tr("AI inference failed: %s") % message, 10000);
+    this->show_status_message(tr("AI inference failed: %1").arg(message), 10000);
 }
 
 void MainWindow::on_scroll_request(int32_t delta, Qt::Orientation orientation) {
@@ -1831,13 +1830,13 @@ void MainWindow::on_pan_request(const QPoint &step) {
     this->set_scroll_value(Qt::Orientation::Vertical, v_bar->value() - step.y());
 }
 
-void MainWindow::set_scroll_value(Qt::Orientation orientation, float value) {
+void MainWindow::set_scroll_value(const Qt::Orientation orientation, const float value) {
     this->canvas_widgets_.scroll_bars_[orientation]->setValue(value);
     if (!this->image_path_.isEmpty())
         this->scroll_values_[orientation][this->image_path_] = value;
 }
 
-void MainWindow::set_zoom(int32_t value, QPointF pos) {
+void MainWindow::set_zoom(const int32_t value, QPointF pos) {
     if (this->image_path_.isEmpty()) {
         SPDLOG_WARN("image_path is None, cannot set zoom");
         return;
@@ -1859,11 +1858,11 @@ void MainWindow::set_zoom(int32_t value, QPointF pos) {
     float canvas_scale_factor = 1.0*canvas_width_new / canvas_width_old;
     float x_shift = pos.x() * canvas_scale_factor - pos.x();
     float y_shift = pos.y() * canvas_scale_factor - pos.y();
-    set_scroll_value(
+    this->set_scroll_value(
         Qt::Horizontal,
         this->canvas_widgets_.scroll_bars_[Qt::Horizontal]->value() + x_shift
     );
-    set_scroll_value(
+    this->set_scroll_value(
         Qt::Vertical,
         this->canvas_widgets_.scroll_bars_[Qt::Vertical]->value() + y_shift
     );
@@ -1971,7 +1970,7 @@ void MainWindow::open_brightness_contrast_dialog(
 
 void MainWindow::toggle_shape_visibility(int32_t value) {
     for (auto *item : this->docks_.shape_list_->items()) {
-        auto target = (
+        const auto target = (
             value == None ? item->checkState() == Qt::CheckState::Unchecked : value
         );
         item->setCheckState(
@@ -2026,7 +2025,7 @@ void MainWindow::load_file(const QString &image_or_label_path) {
         return;
     }
 
-    QList<TlShape> prev_shapes = (
+    const QList<TlShape> prev_shapes = (
         this->config_["keep_prev"].as<bool>() || QApplication::keyboardModifiers() == (Qt::KeyboardModifier::ControlModifier | Qt::KeyboardModifier::ShiftModifier)
         ? this->canvas_widgets_.canvas_->shapes_ : QList<TlShape>{}
     );
@@ -2131,7 +2130,8 @@ void MainWindow::resizeEvent(QResizeEvent *event) {
     if (
         this->canvas_widgets_.canvas_ &&
         !this->image_.isNull() &&
-        this->zoom_mode_ != ZoomMode::MANUAL_ZOOM) {
+        this->zoom_mode_ != ZoomMode::MANUAL_ZOOM
+    ) {
         this->adjust_scale();
     }
     QMainWindow::resizeEvent(event);
@@ -2142,7 +2142,7 @@ void MainWindow::paint_canvas() {
         SPDLOG_WARN("image is null, cannot paint canvas");
         return;
     }
-    canvas_widgets_.canvas_->scale_ = (
+    this->canvas_widgets_.canvas_->scale_ = (
         0.01 * this->canvas_widgets_.zoom_widget_->value()
     );
     this->canvas_widgets_.canvas_->adjustSize();
@@ -2188,9 +2188,8 @@ void MainWindow::reset_layout() {
 }
 
 void MainWindow::closeEvent(QCloseEvent *event) {
-    if (!can_continue()) {
+    if (!this->can_continue())
         event->ignore();
-    }
     this->window_state_.setValue("window/size", this->size());
     this->window_state_.setValue("window/position", this->pos());
     this->window_state_.setValue("window/state", this->saveState());
@@ -2212,7 +2211,7 @@ void MainWindow::dragEnterEvent(QDragEnterEvent *event) {
 }
 
 void MainWindow::dropEvent(QDropEvent *event) {
-    if (!can_continue()) {
+    if (!this->can_continue()) {
         event->ignore();
         return;
     }
@@ -2224,25 +2223,25 @@ void MainWindow::dropEvent(QDropEvent *event) {
 // User Dialogs #
 
 void MainWindow::open_prev_image(bool value) {
-    int32_t row_prev = docks_.file_list_->currentRow() - 1;
+    int32_t row_prev = this->docks_.file_list_->currentRow() - 1;
     if (row_prev < 0) {
         SPDLOG_INFO("there is no prev image");
         return;
     }
     SPDLOG_INFO("setting current row to {}", row_prev);
-    docks_.file_list_->setCurrentRow(row_prev);
-    docks_.file_list_->repaint();
+    this->docks_.file_list_->setCurrentRow(row_prev);
+    this->docks_.file_list_->repaint();
 }
 
 void MainWindow::open_next_image(bool value) {
-    int32_t row_next = docks_.file_list_->currentRow() + 1;
-    if (row_next >= docks_.file_list_->count()) {
+    int32_t row_next = this->docks_.file_list_->currentRow() + 1;
+    if (row_next >= this->docks_.file_list_->count()) {
         SPDLOG_INFO("there is no next image");
         return;
     }
     SPDLOG_INFO("setting current row to {}", row_next);
-    docks_.file_list_->setCurrentRow(row_next);
-    docks_.file_list_->repaint();
+    this->docks_.file_list_->setCurrentRow(row_next);
+    this->docks_.file_list_->repaint();
 }
 
 void MainWindow::open_file_with_dialog(bool value) {
@@ -2265,7 +2264,7 @@ void MainWindow::open_file_with_dialog(bool value) {
     }
 }
 
-void MainWindow::prompt_output_dir(bool _value) {
+void MainWindow::prompt_output_dir(bool value) {
     QString default_output_dir;
     if (!this->output_dir_.isEmpty()) {
         default_output_dir = this->output_dir_;
@@ -2421,12 +2420,12 @@ bool MainWindow::is_settings_editable() {
 LabelDialog *MainWindow::make_label_dialog() {
     return new LabelDialog(
         this,
-        YAML_VSTR(config_["labels"]),
-        config_["sort_labels"].as<bool>(),
-        config_["show_label_text_field"].as<bool>(),
-        YAML_QSTR(config_["label_completion"]),
-        YAML_QMAP(config_["fit_to_content"]),
-        YAML_QMAP(config_["label_flags"])
+        YAML_VSTR(this->config_["labels"]),
+        this->config_["sort_labels"].as<bool>(),
+        this->config_["show_label_text_field"].as<bool>(),
+        YAML_QSTR(this->config_["label_completion"]),
+        YAML_QMAP(this->config_["fit_to_content"]),
+        YAML_QMAP(this->config_["label_flags"])
     );
 }
 
@@ -2621,8 +2620,8 @@ void MainWindow::remove_selected_point() {
     this->canvas_widgets_.canvas_->update();
     if (
         this->canvas_widgets_.canvas_->hovered_shape_ != None &&
-        this->canvas_widgets_.canvas_->shapes_[this->canvas_widgets_.canvas_->hovered_shape_].points_.empty())
-    {
+        this->canvas_widgets_.canvas_->shapes_[this->canvas_widgets_.canvas_->hovered_shape_].points_.empty()
+    ) {
         this->canvas_widgets_.canvas_->delete_shape(
             this->canvas_widgets_.canvas_->shapes_[this->canvas_widgets_.canvas_->hovered_shape_]
         );
@@ -2975,6 +2974,13 @@ QListWidgetItem *MainWindow::current_item() const {
     }
     return nullptr;
 }
+
+TlShape MainWindow::canvas_shape(const TlShape &shape) const {
+    for (auto &s : this->canvas_widgets_.canvas_->shapes_) {
+        if (shape == s) { return s; }
+    }
+    return TlShape{};
+};
 
 void MainWindow::slotTaskSubmit() {
     // 非GUI线程创建和操作QProgressDialog违反QT的GUI线程规则.

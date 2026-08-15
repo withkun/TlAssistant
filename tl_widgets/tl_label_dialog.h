@@ -57,6 +57,6 @@ public:
     QMap<QString, bool> getFlags();
     int32_t getGroupId();
     std::tuple<QString, QMap<QString, bool>, int32_t, QString>
-    popUp(QString text, QPoint position=QPoint(), QMap<QString, bool> flags={}, int32_t group_id=None, QString description="", bool flags_disabled=false, bool move=true);
+    popup(QString text, QPoint position=QPoint(), QMap<QString, bool> flags={}, int32_t group_id=None, QString description="", bool flags_disabled=false, bool move=true);
 };
 #endif //__INC_LABEL_DIALOG_H

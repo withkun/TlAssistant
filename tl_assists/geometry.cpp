@@ -77,71 +77,51 @@ std::vector<cv::Point> min_area_rect(const std::vector<cv::Point> &hull) {
         const auto length = float(std::sqrt(edge.dot(hull[i])));
         if (length <= 1)
             continue;
-        auto u = edge / length;
-        auto perp = cv::Point(-u.y, u.x);   // 逆时针旋转90度
-        std::vector<double> u_coords(n);
-        std::vector<double> p_coords(n);
-        double u_min = std::numeric_limits<double>::max();
-        double u_max = std::numeric_limits<double>::lowest();
-        double p_min = std::numeric_limits<double>::max();
-        double p_max = std::numeric_limits<double>::lowest();
-        for (auto j = 0; j < n; ++j) {
-            // 点积计算投影
-            const double uc = hull[j].x * u.x    + hull[j].y * u.y;
-            const double pc = hull[j].x * perp.x + hull[j].y * perp.y;
-            u_coords[j] = uc;
-            p_coords[j] = pc;
-            if (uc < u_min) u_min = uc;
-            if (uc > u_max) u_max = uc;
-            if (pc < p_min) p_min = pc;
-            if (pc > p_max) p_max = pc;
-        }
-
+        const auto u = edge / length;
+        const auto perp = cv::Point(-u.y, u.x);   // 逆时针旋转90度
+        const auto u_coords = hull | std::views::transform([&u](const auto &p) { return p.x * u.x + p.y * u.y; }) | std::ranges::to<std::vector<double>>();
+        const auto p_coords = hull | std::views::transform([&perp](const auto &p) { return p.x * perp.x + p.y * perp.y; }) | std::ranges::to<std::vector<double>>();
+        const auto u_min = *std::ranges::min_element(u_coords), u_max = *std::ranges::max_element(u_coords);
+        const auto p_min = *std::ranges::min_element(p_coords), p_max = *std::ranges::max_element(p_coords);
         // 5. 计算宽度和高度
-        double uExtent = u_max - u_min;
-        double pExtent = p_max - p_min;
-        double area = uExtent * pExtent;
-
+        const auto u_extent = u_max - u_min;
+        const auto p_extent = p_max - p_min;
+        const auto area = u_extent * p_extent;
         // 6. 更新最优解
-        if (area >= best_area) continue;
+        if (area >= best_area)
+            continue;
         best_area = area;
-
         // 7. 计算中心点 (在全局坐标系下)
-        // center = (u_min + u_max)/2 * u + (p_min + p_max)/2 * perp
-        double uCenter = (u_min + u_max) / 2.0;
-        double pCenter = (p_min + p_max) / 2.0;
-        cv::Point2d center = uCenter * u + pCenter * perp;
+        cv::Point2d center = (u_min + u_max) / 2.0 * u + (p_min + p_max) / 2.0 * perp;
 
         // 8. 确定长轴和短轴，并应用轴向约束
-        cv::Point2d longAxis, shortAxis;
-        double halfLong, halfShort;
-
-        if (uExtent >= pExtent) {
-            longAxis = u;
-            halfLong = uExtent / 2.0;
-            halfShort = pExtent / 2.0;
+        cv::Point2d long_axis;
+        double half_long, half_short;
+        if (u_extent >= p_extent) {
+            long_axis = u; half_long = u_extent / 2.0; half_short = p_extent / 2.0;
         } else {
-            longAxis = perp;
-            halfLong = pExtent / 2.0;
-            halfShort = uExtent / 2.0;
+            long_axis = perp; half_long = p_extent / 2.0; half_short = u_extent / 2.0;
         }
 
-        // &zwnj;**关键约束**&zwnj;：将长轴 Pin 到右半平面 (x > 0) 或 下半平面 (x==0, y<0)
+        // **关键约束**: 将长轴 Pin 到右半平面 (x > 0) 或 下半平面 (x==0, y<0)
         // 这保证了无论凸包如何旋转，生成的矩形顶点顺序是唯一的
-        if (longAxis.x < 0 || (std::abs(longAxis.x) < 1e-9 && longAxis.y < 0)) {
-            longAxis = -longAxis;
-        }
-
-        // 计算短轴 (右手系垂直)
-        shortAxis = cv::Point2d(-longAxis.y, longAxis.x);
+        // Pin the long axis to the right half-plane (or to the lower
+        // half-plane when it is exactly vertical) so the corner sequence is
+        // platform-independent.
+        if (long_axis.x < 0 || (std::abs(long_axis.x) < 1e-9 && long_axis.y < 0))
+            long_axis = -long_axis;
+        // Right-handed perpendicular yields a deterministic corner traversal:
+        // p0 → p1 along the long axis, then p1 → p2 along the short axis.
+        const auto short_axis = cv::Point2d(-long_axis.y, long_axis.x);
 
         // 9. 计算四个顶点
         // 顺序: p0(左下) -> p1(右下) -> p2(右上) -> p3(左上) 相对于长轴方向
-        best_corners.resize(4);
-        best_corners[0] = center - longAxis * halfLong - shortAxis * halfShort;
-        best_corners[1] = center + longAxis * halfLong - shortAxis * halfShort;
-        best_corners[2] = center + longAxis * halfLong + shortAxis * halfShort;
-        best_corners[3] = center - longAxis * halfLong + shortAxis * halfShort;
+        best_corners = {
+            center - long_axis * half_long - short_axis * half_short,
+            center + long_axis * half_long - short_axis * half_short,
+            center + long_axis * half_long + short_axis * half_short,
+            center - long_axis * half_long + short_axis * half_short,
+        };
     }
     // Callers filter hulls with fewer than three distinct points, so the loop
     // above always finds at least one positive-length edge.
@@ -158,8 +138,6 @@ float get_contour_length(const std::vector<cv::Point> &contour) {
 std::vector<cv::Point> compute_polygon_from_mask(const cv::Mat &mask) {
     // Pad so a region touching the image border still has a background ring to
     // close its contour against; the resulting offset is removed below.
-    if (mask.empty())
-        return {};
     std::vector<std::vector<cv::Point>> contours;
     cv::findContours(mask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_NONE);
     if (contours.empty()) {

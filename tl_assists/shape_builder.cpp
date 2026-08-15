@@ -1,5 +1,4 @@
 #include "shape_builder.h"
-#include "tl_modules/polygon_from_mask.h"
 
 
 static TlShape build_shape(
@@ -115,7 +114,7 @@ QList<QPointF> oriented_rectangle_for_detection(
     }
     if (detection.bbox) {
         const auto &[xmin, ymin, xmax, ymax] = detection.bbox;
-        return {
+        return QList<QPointF>{
             QPointF(xmin, ymin), QPointF(xmax, ymin), QPointF(xmax, ymax), QPointF(xmin, ymax)
         };
     }

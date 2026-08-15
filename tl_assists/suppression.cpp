@@ -27,7 +27,7 @@ QList<Detection> suppress_detections_greedy(
         );
 
     QList<Detection> kept;
-    std::map<std::string, std::vector<LocalMask>> kept_masks_by_label;
+    std::map<std::string, QList<LocalMask>> kept_masks_by_label;
     for (auto &detection : detections) {
         if (!detection.bbox) {
             kept.append(detection);
@@ -44,8 +44,8 @@ QList<Detection> suppress_detections_greedy(
         )
             continue;
 
-        kept.emplace_back(detection);
-        peers.emplace_back(new_local);
+        kept.append(detection);
+        peers.append(new_local);
     }
     return kept;
 }
@@ -108,7 +108,7 @@ LocalMask local_mask_from_detection(const Detection &detection) {
     if (detection.mask.empty()) {
         const auto h = ymax - ymin + 1, w = xmax - xmin + 1;
         const auto mask = cv::Mat::ones(h, w, CV_8UC1);
-        return LocalMask{.mask=mask, .origin_x=xmin, .origin_y=ymin, .area=h * w};
+        return LocalMask{.mask=mask, .origin_xy={xmin, ymin}, .area=h * w};
     }
     // Mask geometry below assumes mask covers exactly the bbox-derived extent
     // (matching the OSAM Annotation contract). Reject inconsistent shapes loudly
@@ -121,8 +121,7 @@ LocalMask local_mask_from_detection(const Detection &detection) {
         );
     return LocalMask{
         .mask=detection.mask,
-        .origin_x=xmin,
-        .origin_y=ymin,
+        .origin_xy={xmin, ymin},
         .area=cv::countNonZero(detection.mask),
     };
 }
@@ -149,8 +148,7 @@ LocalMask local_mask_from_shape(const TlShape &shape) {
     );
     return LocalMask{
         .mask=mask,
-        .origin_x=xmin,
-        .origin_y=ymin,
+        .origin_xy={xmin, ymin},
         .area=cv::countNonZero(mask),
     };
 }
@@ -175,9 +173,9 @@ cv::Mat rasterize_shape(
         const auto center = shape.points_[0], edge = shape.points_[1];
         const auto cx_local = center.x() - xmin;
         const auto cy_local = center.y() - ymin;
-        const auto radius = utils::distance(edge - center);
+        const auto radius = (int32_t)utils::distance(edge - center);
         cv::Mat image = cv::Mat::zeros(height, width, CV_8UC1);
-        cv::circle(image, cv::Point(cx_local, cy_local), radius, cv::Scalar(255), 1, cv::FILLED);
+        cv::circle(image, cv::Point2d(cx_local, cy_local), radius, cv::Scalar(255), 1, cv::FILLED);
         return image > 0;
     }
     if (QKey{"polygon", "oriented_rectangle"}.contains(shape.shape_type_)) {
@@ -192,8 +190,8 @@ cv::Mat rasterize_shape(
 int32_t compute_mask_intersection_area(const LocalMask &a, const LocalMask &b) {
     // bbox endpoints are inclusive pixel coords (mask width = xmax - xmin + 1),
     // so xmin + w is the exclusive x-upper-bound used for clipping.
-    const auto a_xmin = a.origin_x, a_ymin = a.origin_y;
-    const auto b_xmin = b.origin_x, b_ymin = b.origin_y;
+    const auto &[a_xmin, a_ymin] = a.origin_xy;
+    const auto &[b_xmin, b_ymin] = b.origin_xy;
     const auto a_h = a.mask.rows, a_w = a.mask.cols;
     const auto b_h = b.mask.rows, b_w = b.mask.cols;
 

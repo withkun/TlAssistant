@@ -221,7 +221,7 @@ void ShapeListView::mouseReleaseEvent(QMouseEvent *e) {
         && std::set(this->selected_items().begin(), this->selected_items().end()) != std::set(items_at_press.begin(), items_at_press.end())
     ) {
         this->selectionModel()->clearSelection();
-        for (auto &item : items_at_press)
+        for (const auto &item : items_at_press)
             this->selectionModel()->select(
                 this->model_->indexFromItem(item),
                 QItemSelectionModel::SelectionFlag::Select
@@ -251,11 +251,9 @@ int32_t ShapeListView::len() const {
 }
 
 QList<ShapeListItem *> ShapeListView::items() const {
-    QList<ShapeListItem *> items;
-    for (auto row = 0; row < this->model_->rowCount(); ++row) {
-        items.emplace_back(dynamic_cast<ShapeListItem *>(this->model_->item(row)));
-    }
-    return items;
+    return std::views::iota(0, this->model_->rowCount())
+        | std::views::transform([this](const auto &i) { return dynamic_cast<ShapeListItem *>(this->model_->item(i)); })
+        | std::ranges::to<QList<ShapeListItem *>>();
 }
 
 //def __getitem__(self, i: int) -> LabelListWidgetItem:

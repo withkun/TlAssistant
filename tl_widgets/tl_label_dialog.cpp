@@ -227,7 +227,7 @@ int32_t LabelDialog::getGroupId() {
 }
 
 std::tuple<QString, QMap<QString, bool>, int32_t, QString> LabelDialog::
-popUp(
+popup(
     QString text,
     QPoint position,
     QMap<QString, bool> flags,

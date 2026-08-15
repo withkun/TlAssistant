@@ -32,9 +32,8 @@ QList<TlShape> AiAssistSession::submit_propose_shapes(const QPixmap &image,
 }
 
 SamSession &AiAssistSession::get_session() {
-    if (this->sam_session_ == nullptr || this->sam_session_->model_name() != this->model_name_) {
+    if (this->sam_session_ == nullptr || this->sam_session_->model_name() != this->model_name_)
         this->sam_session_ = std::make_unique<SamSession>(this->model_name_);
-    }
     return *this->sam_session_;
 }
 

@@ -316,7 +316,7 @@ private:
     void reset_interaction_state();
     void load_pixmap(const QPixmap &pixmap, bool clear_shapes=true, const QString &filename="");
     void load_shapes(const QList<TlShape> &shapes, bool replace=true);
-    void set_shape_visible(TlShape &shape, bool value);
+    void set_shape_visible(const TlShape &shape, bool value);
     void apply_cursor(CursorRole role);
     void release_cursor();
     void reset_state();
@@ -334,15 +334,6 @@ private:
     static QList<QPointF> reproject_oriented_rectangle_corners(const QList<QPointF> &corners, int32_t vertex_index, const QPointF &pos, const QSize &image_size, bool allow_out_of_bounds);
 
 
-
     void update_shape_info(const TlShape &shape);
-    void submit_shape_with_ai(const QList<QPointF> &points, const QList<int32_t> &labels);
-    void update_shape_with_ai(const QList<QPointF> &points, const QList<int32_t> &labels);
-    TlShape shape_from_annotation(const Annotation &annotation, const std::string &output_format);
-    QList<TlShape> shapes_from_ai_response(GenerateResponse &response, const std::string &output_format);
-
-    SamSession &get_osam_session();
-    QList<TlShape> shapes_from_points_ai(const QList<QPointF> &points, const QList<int32_t> &labels);
-    QList<TlShape> shapes_from_bbox_ai(const QList<QPointF> &bbox_points);
 };
 #endif //__INC_CANVAS_H
