@@ -21,21 +21,21 @@ public:
             bool closed=false);
     TlShape(const QString &shape_type, const QList<QPointF> &points, const QList<int32_t> &point_labels, bool closed);
 
-    QString                     label_;
-    int32_t                     group_id_{-1};
-    QString                     shape_type_{"polygon"};
-    QMap<QString, bool>         flags_;
-    QString                     description_;
-    cv::Mat                     mask_;
-    QList<QPointF>              points_;
-    QList<int32_t>              point_labels_;
-    QMap<QString, QByteArray>   other_data_;
-    bool                        closed_{false};
-    bool                        visible_{true};
+    QString                             label_;
+    int32_t                             group_id_{-1};
+    QString                             shape_type_{"polygon"};
+    QMap<QString, bool>                 flags_;
+    QString                             description_;
+    cv::Mat                             mask_;
+    QList<QPointF>                      points_;
+    QList<int32_t>                      point_labels_;
+    QMap<QString, QByteArray>           other_data_;
+    bool                                closed_{false};
+    bool                                visible_{true};
 
 private:
     friend class Canvas;
-    QString                     uuid_;
+    QString                             uuid_;
     void _post_init_();
 
 public:

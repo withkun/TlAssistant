@@ -418,7 +418,8 @@ void Canvas::report_inference_failure(const QString &error) {
 
 void Canvas::backup_shapes() {
     while (this->shape_backups_.length() > this->num_backups_) { this->shape_backups_.pop_front(); }
-    this->shape_backups_.append(this->shapes_);
+    QList<TlShape> shapes = this->shapes_ | std::views::transform([](const auto &s) { return s.copy(); }) | std::ranges::to<QList<TlShape>>();
+    this->shape_backups_.append(shapes);
 }
 
 //@property

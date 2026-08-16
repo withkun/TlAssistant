@@ -26,12 +26,12 @@ QString VertexHighlight::point_type() const {
 Palette Palette::from_rgb(const std::vector<int32_t> &rgb) {
     const int32_t r = rgb[0], g = rgb[1], b = rgb[2];
     return Palette{
-        .line_ = QColor(r, g, b),
-        .fill_ = QColor(r, g, b, 128),
-        .select_line_ = QColor(255, 255, 255),
-        .select_fill_ = QColor(r, g, b, 155),
-        .vertex_fill_ = QColor(r, g, b),
-        .hvertex_fill_ = QColor(255, 255, 255),
+        .line_=QColor(r, g, b),
+        .fill_=QColor(r, g, b, 128),
+        .select_line_=QColor(255, 255, 255),
+        .select_fill_=QColor(r, g, b, 155),
+        .vertex_fill_=QColor(r, g, b),
+        .hvertex_fill_=QColor(255, 255, 255),
     };
 }
 

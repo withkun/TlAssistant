@@ -24,7 +24,7 @@ public:
     static QSize default_size_hint();
 
 private:
-    QTextDocument      *doc_{nullptr};
+    QTextDocument                      *doc_{nullptr};
 };
 
 class ShapeListItem : public QStandardItem {
@@ -51,8 +51,8 @@ class ItemSnapshot {
 public:
     // A persistent index, not the item itself: the model owns the item and
     // deletes it on row removal, which would leave a dead wrapper here.
-    QPersistentModelIndex   index;
-    Qt::CheckState          check_state;
+    QPersistentModelIndex               index;
+    Qt::CheckState                      check_state;
 };
 
 // QListView是列表形式的展示控件
@@ -76,15 +76,10 @@ signals:
 public slots:
 
 private:
-    ShapeItemModel             *model_{};
-    QList<ItemSnapshot>         press_snapshot_;
+    ShapeItemModel                     *model_{};
+    QList<ItemSnapshot>                 press_snapshot_;
 
 public:
-    //void __init__();
-    int32_t len() const;
-    QList<ShapeListItem *> items() const;
-    //void __iter__();
-
     void on_item_dropped();
     void on_item_changed(QStandardItem *item);
     void on_item_selection_changed(const QItemSelection &selected, const QItemSelection &deselected);
@@ -97,8 +92,10 @@ public:
     void removeItem(ShapeListItem *item);
     void select_item(ShapeListItem *item);
     ShapeListItem *find_item_by_shape(const TlShape &shape);
-    void clear();
 
+    void clear();
+    int32_t len() const;
+    QList<ShapeListItem *> items() const;
     bool empty() const {
         return this->model_->rowCount() == 0;
     }

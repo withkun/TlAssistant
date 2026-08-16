@@ -39,7 +39,7 @@ enum class CanvasMode: int32_t {
 };
 
 inline QString ModeName(const CanvasMode c) {
-    const static std::map<CanvasMode, QString> ModeNames = {
+    static const std::map<CanvasMode, QString> ModeNames = {
         {CanvasMode::CREATE, "CREATE"},
         {CanvasMode::EDIT,   "EDIT"},
     };
@@ -57,10 +57,10 @@ inline QString ModeName(const CanvasMode c) {
 
 class DraftShape {
 public:
-    QString             shape_type_{"polygon"};
-    QList<QPointF>      points_;
-    QList<int32_t>      point_labels_;
-    bool                closed_{false};
+    QString                             shape_type_{"polygon"};
+    QList<QPointF>                      points_;
+    QList<int32_t>                      point_labels_;
+    bool                                closed_{false};
 
     DraftShape close();
     DraftShape open();

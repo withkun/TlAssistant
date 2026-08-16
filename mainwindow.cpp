@@ -47,11 +47,12 @@ const QList<QString> AI_CREATE_MODES {
 const QList<QString> AI_MODELS_WITHOUT_POINT_SUPPORT { "sam3:latest", };
 
 
-MainWindow::MainWindow(const QString &config_file,
-                       const YAML::Node &config_overrides,
-                       const QString &file_or_dir,
-                       const QString &output_dir)
-    : QMainWindow(), ui_(new Ui::MainWindow), window_state_("tl_assistant", "tl_assistant") {
+MainWindow::MainWindow(
+    const QString &config_file,
+    const YAML::Node &config_overrides,
+    const QString &file_or_dir,
+    const QString &output_dir
+) : QMainWindow(), ui_(new Ui::MainWindow), window_state_("tl_assistant", "tl_assistant") {
     ui_->setupUi(this);
     this->setWindowTitle(_appname_);
 
