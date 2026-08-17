@@ -24,22 +24,26 @@ public:
     int64_t                         max_annotations_{100};
 };
 
-struct BoundingBox {
-    int32_t                         x1{0};         // tl_x
-    int32_t                         y1{0};         // tl_y
-    int32_t                         x2{0};         // br_x
-    int32_t                         y2{0};         // br_y
+template<class TYPE>
+struct BoundingBox_ {
+    TYPE                            xmin{};         // tl_x
+    TYPE                            ymin{};         // tl_y
+    TYPE                            xmax{};         // br_x
+    TYPE                            ymax{};         // br_y
 
     explicit operator bool() const {
-        return !(x1 == 0 && y1 == 0 && x2 == 0 && y2 == 0);
+        return !(xmin == 0 && ymin == 0 && xmax == 0 && ymax == 0);
     }
 };
+typedef BoundingBox_<int>           BoundingBox;
+typedef BoundingBox_<float>         BoundingBoxF;
+
 
 struct Annotation {
-    float                           score;  // Optional[float] = pydantic.Field(default=None)
-    BoundingBox                     bbox;   // Optional[BoundingBox] = pydantic.Field(default=None)
-    std::string                     text;   // Optional[str] = pydantic.Field(default=None)
-    cv::Mat                         mask;   // Optional[np.ndarray] = pydantic.Field(default=None)
+    float                           score;          // Optional[float] = pydantic.Field(default=None)
+    BoundingBox                     bounding_box;   // Optional[BoundingBox] = pydantic.Field(default=None)
+    std::string                     text;           // Optional[str] = pydantic.Field(default=None)
+    cv::Mat                         mask;           // Optional[np.ndarray] = pydantic.Field(default=None)
 };
 using Annotations = std::vector<Annotation>;
 

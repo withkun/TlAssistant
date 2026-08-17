@@ -86,6 +86,8 @@ set(TL_SOURCES
     tl_widgets/status_stats.cpp
     tl_widgets/tl_canvas.h
     tl_widgets/tl_canvas.cpp
+    tl_widgets/tl_download.h
+    tl_widgets/tl_download.cpp
     tl_widgets/tl_label_list.h
     tl_widgets/tl_label_list.cpp
     tl_widgets/tl_label_dialog.h
@@ -150,15 +152,17 @@ set(AI_SOURCES
     tl_assists/suppression.cpp
     tl_assists/shape_builder.h
     tl_assists/shape_builder.cpp
+    tl_assists/text_detection.h
+    tl_assists/text_detection.cpp
 
     tl_modules/info_button.h
     tl_modules/info_button.cpp
+    tl_modules/non_maximum.h
+    tl_modules/non_maximum.cpp
     tl_modules/ai_assist_annotation.h
     tl_modules/ai_assist_annotation.cpp
     tl_modules/ai_prompt_annotation.h
     tl_modules/ai_prompt_annotation.cpp
-    tl_modules/bbox_from_text.h
-    tl_modules/bbox_from_text.cpp
     tl_modules/polygon_from_mask.h
     tl_modules/polygon_from_mask.cpp
 )

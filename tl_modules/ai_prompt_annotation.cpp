@@ -45,7 +45,7 @@ void AiPromptAnnotation::init_ui(const std::string &default_model, const std::fu
     header_layout->addStretch();
     layout->addLayout(header_layout);
 
-    body_ = new QWidget();
+    this->body_ = new QWidget();
     body_->installEventFilter(this);
     auto *const body_layout = new QVBoxLayout();
     body_layout->setContentsMargins(0, 0, 0, 0);
@@ -56,7 +56,7 @@ void AiPromptAnnotation::init_ui(const std::string &default_model, const std::fu
     grid->setContentsMargins(0, 0, 0, 0);
     grid->setSpacing(2);
 
-    text_input_ = new QLineEdit();
+    this->text_input_ = new QLineEdit();
     text_input_->setPlaceholderText(tr("e.g., dog,cat,bird"));
     text_input_->setFixedHeight(24);
     grid->addWidget(text_input_, 0, 0);
@@ -64,7 +64,7 @@ void AiPromptAnnotation::init_ui(const std::string &default_model, const std::fu
     auto *const run_button = new QToolButton();
     run_button->setText(tr("Run"));
     run_button->setFixedHeight(24);
-    run_button->setCursor(Qt::PointingHandCursor);
+    run_button->setCursor(Qt::CursorShape::PointingHandCursor);
     QObject::connect(run_button, &QToolButton::clicked, [=] { on_submit(); });
     grid->addWidget(run_button, 0, 1);
 
@@ -72,7 +72,7 @@ void AiPromptAnnotation::init_ui(const std::string &default_model, const std::fu
     settings_layout->setContentsMargins(0, 0, 0, 0);
     settings_layout->setSpacing(4);
 
-    model_combo_ = new QComboBox();
+    this->model_combo_ = new QComboBox();
     for (auto &[model_id, model_display] : available_models_) {
         model_combo_->addItem(QString::fromStdString(model_display), QString::fromStdString(model_id));
     }
@@ -82,27 +82,38 @@ void AiPromptAnnotation::init_ui(const std::string &default_model, const std::fu
             model_index = i;
         }
     }
-    model_combo_->setCurrentIndex(model_index);
+    this->model_combo_->setCurrentIndex(model_index);
     settings_layout->addWidget(model_combo_, 1);
 
-    auto *const score_label = new QLabel(tr("Score"));
-    score_label->setStyleSheet("color: gray; font-size: 10px;");
-    settings_layout->addWidget(score_label);
+    // Size and mute these via QFont and a palette role, never a stylesheet:
+    // a stylesheet switches the widget to QStyleSheetStyle, which pins its
+    // resolved colors at polish time and does not re-resolve them on a live
+    // color-scheme change, leaving the text faded after a mid-session theme
+    // switch.
+    auto small_font = this->font();
+    small_font.setPixelSize(10);
 
-    score_spinbox_ = new QDoubleSpinBox();
-    score_spinbox_->setStyleSheet("font-size: 10px;");
+    const auto make_threshold_label = [&](const auto &text) {
+        auto *label = new QLabel(text);
+        label->setFont(small_font);
+        label->setForegroundRole(QPalette::ColorRole::PlaceholderText);
+        return label;
+    };
+
+    settings_layout->addWidget(make_threshold_label(tr("Score")));
+
+    this->score_spinbox_ = new QDoubleSpinBox();
+    score_spinbox_->setFont(small_font);
     score_spinbox_->setFixedWidth(50);
     score_spinbox_->setRange(0, 1);
     score_spinbox_->setSingleStep(0.05);
     score_spinbox_->setValue(default_score_threshold_);
     settings_layout->addWidget(score_spinbox_);
 
-    auto *const iou_label = new QLabel(tr("IoU"));
-    iou_label->setStyleSheet("color: gray; font-size: 10px;");
-    settings_layout->addWidget(iou_label);
+    settings_layout->addWidget(make_threshold_label(tr("IoU")));
 
-    iou_spinbox_ = new QDoubleSpinBox();
-    iou_spinbox_->setStyleSheet("font-size: 10px;");
+    this->iou_spinbox_ = new QDoubleSpinBox();
+    iou_spinbox_->setFont(small_font);
     iou_spinbox_->setFixedWidth(50);
     iou_spinbox_->setRange(0, 1);
     iou_spinbox_->setSingleStep(0.05);
@@ -114,41 +125,42 @@ void AiPromptAnnotation::init_ui(const std::string &default_model, const std::fu
     body_layout->addLayout(grid);
     layout->addWidget(body_);
 
-    setMaximumWidth(320);
+    this->setMaximumWidth(320);
 }
 
-std::vector<std::string> AiPromptAnnotation::get_texts_prompt() const {
-    const auto items = text_input_->text().split(",");
-    std::vector<std::string> prompt_texts;
-    std::ranges::transform(items, std::back_inserter(prompt_texts), [](auto &s) { return s.toStdString(); });
-    return prompt_texts;
+std::string AiPromptAnnotation::get_text_prompt() const {
+    return this->text_input_->text().toStdString();
 }
 
 std::string AiPromptAnnotation::get_model_name() const {
-    return model_combo_->currentData().toString().toStdString();
+    return this->model_combo_->currentData().toString().toStdString();
+}
+
+std::string AiPromptAnnotation::get_model_display_name() {
+    return this->model_combo_->currentText().toStdString();
 }
 
 float AiPromptAnnotation::get_score_threshold() {
-    return score_spinbox_->value();
+    return this->score_spinbox_->value();
 }
 
 float AiPromptAnnotation::get_iou_threshold() {
-    return iou_spinbox_->value();
+    return this->iou_spinbox_->value();
 }
 
 void AiPromptAnnotation::setEnabled(bool a0) {
-    body_->setEnabled(a0);
+    this->body_->setEnabled(a0);
 }
 
 bool AiPromptAnnotation::eventFilter(QObject *a0, QEvent *a1) {
-    if (a0 == body_ && !body_->isEnabled()) {
+    if (a0 == body_ && !this->body_->isEnabled()) {
         if (a1->type() == QEvent::Enter) {
             QToolTip::showText(
                 QCursor::pos(),
                 tr(
                     "Select 'Polygon', 'Rectangle', or 'AI-Points' mode to enable"
                 ),
-                body_
+                this->body_
             );
         }
     }

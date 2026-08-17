@@ -18,6 +18,8 @@ public:
     }
 };
 
+extern const QList<std::string> MASK_REQUIRED_SHAPE_TYPES;
+
 
 TlShape shape_from_detection(const Detection &detection, const std::string &shape_type);
 

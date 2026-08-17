@@ -33,8 +33,10 @@
 #include "tl_widgets/tl_brightness.h"
 #include "tl_widgets/status_stats.h"
 #include "tl_modules/sam_apis.h"
-#include "tl_modules/bbox_from_text.h"
+#include "tl_assists/suppression.h"
+#include "tl_assists/text_detection.h"
 #include "tl_modules/polygon_from_mask.h"
+#include "nlohmann/json.hpp"
 
 
 const static std::vector<QColor> LABEL_COLORMAP = label_colormap();
@@ -1155,111 +1157,116 @@ void MainWindow::submit_ai_prompt() {
         return;
     }
 
-    const auto texts = this->ai_prompt_annotation_->get_texts_prompt();
-    if (texts.empty()) {
-        return;
-    }
+    const auto texts = split(this->ai_prompt_annotation_->get_text_prompt(), ',');
+    const QList<std::string> q_texts(texts.begin(), texts.end());
 
     const auto model_name = this->ai_prompt_annotation_->get_model_name();
     //model_type = osam.apis.get_model_type_by_name(model_name);
     //if not (_is_already_downloaded := model_type.get_size() is not None):
     //    if not download_ai_model(model_name=model_name, parent=self):
     //        return;
-    if (this->text_osam_session_ == nullptr ||
-        this->text_osam_session_->model_name() != model_name) {
+    if (
+        this->text_osam_session_ == nullptr
+        || this->text_osam_session_->model_name() != model_name
+    )
         this->text_osam_session_ = std::make_unique<SamSession>(model_name);
-    }
 
-    //try:
-    //    boxes, scores, labels, masks = _automation.get_bboxes_from_texts(
-    //        session=self._text_osam_session,
-    //        image=_utils.img_qt_to_arr(self._image)[:, :, :3],
-    //        image_id=str(hash(self._image_path)),
-    //        texts=texts,
-    //    )
-    //except Exception as e:
-    //    logger.opt(exception=e).error("AI text inference failed")
-    //    self._on_inference_failed(message=f"{type(e).__name__}: {e}")
-    //    return
-    //
-    //if (
-    //    masks is None
-    //    and len(boxes) > 0
-    //    and shape_type in _automation.MASK_REQUIRED_SHAPE_TYPES
-    //):
-    //    QtWidgets.QMessageBox.warning(
-    //        self,
-    //        self.tr("Mask Output Unavailable"),
-    //        self.tr(
-    //            "%s only detects bounding boxes and cannot create "
-    //            "'%s' annotations.\n\n"
-    //            "Switch the AI Text-to-Annotation model to 'SAM3 (smart)', "
-    //            "or set the output format to 'Rectangle'."
-    //        )
-    //        % (self._ai_text.get_model_display_name(), shape_type),
-    //    )
-    //    return
-    //
-    //SCORE_FOR_EXISTING_SHAPE: Final[float] = 1.01
-    //for shape in self._canvas_widgets.canvas.shapes:
-    //    if shape.shape_type != shape_type or shape.label not in texts:
-    //        continue
-    //    shape_bbox = _automation.shape_to_xyxy_bbox(shape=shape)
-    //    if shape_bbox is None:
-    //        continue
-    //    boxes = np.r_[boxes, [shape_bbox]]
-    //    scores = np.r_[scores, [SCORE_FOR_EXISTING_SHAPE]]
-    //    labels = np.r_[labels, [texts.index(shape.label)]]
-    //
-    //boxes, scores, labels, indices = _automation.nms_bboxes(
-    //    boxes=boxes,
-    //    scores=scores,
-    //    labels=labels,
-    //    iou_threshold=self._ai_text.get_iou_threshold(),
-    //    score_threshold=self._ai_text.get_score_threshold(),
-    //    max_num_detections=100,
-    //)
-    //
-    //is_new = scores != SCORE_FOR_EXISTING_SHAPE
-    //boxes = boxes[is_new]
-    //scores = scores[is_new]
-    //labels = labels[is_new]
-    //indices = indices[is_new]
-    //
-    //if masks is None:
+if (false) {
+    // 测试原始逻辑.
+    std::vector<BoundingBoxF> boxes; std::vector<float> scores; std::vector<int32_t> labels; std::vector<cv::Mat> masks; std::vector<int32_t> indices;
+    try {
+        std::tie(boxes, scores, labels, masks) = get_bboxes_from_texts(
+            this->text_osam_session_.get(),
+            utils::ImageToMat(this->image_),
+            std::hash<QString>{}(this->image_path_),
+            texts
+        );
+    } catch (std::exception &e) {
+        SPDLOG_ERROR("AI text inference failed: {}", e.what());
+        this->on_inference_failed("{type(e).__name__}: {e}");
+        return;
+    }
+    if (
+        masks.empty()
+        && !boxes.empty()
+        && MASK_REQUIRED_SHAPE_TYPES.contains(shape_type)
+    ) {
+        QMessageBox::warning(
+            this,
+            tr("Mask Output Unavailable"),
+            tr(
+                "%1 only detects bounding boxes and cannot create "
+                "'%2' annotations.\n\n"
+                "Switch the AI Text-to-Annotation model to 'SAM3 (smart)', "
+                "or set the output format to 'Rectangle'."
+            )
+            .arg(this->ai_prompt_annotation_->get_model_display_name(), shape_type)
+        );
+        return;
+    }
+    constexpr float SCORE_FOR_EXISTING_SHAPE = 1.01f;
+    for (const auto &shape : this->canvas_widgets_.canvas_->shapes_) {
+        if (shape.shape_type_ != shape_type || !q_texts.contains(shape.label_))
+            continue;
+        const auto shape_bbox = shape_to_xyxy_bbox(shape);
+        if (!shape_bbox)
+            continue;
+        boxes.push_back({(float)shape_bbox.xmin, (float)shape_bbox.ymin, (float)shape_bbox.xmax, (float)shape_bbox.ymax});
+        scores.push_back(SCORE_FOR_EXISTING_SHAPE);
+        labels.push_back(q_texts.indexOf(shape.label_));
+    }
+    std::tie(boxes, scores, labels, indices) = nms_bboxes(
+        boxes,
+        scores,
+        labels,
+        this->ai_prompt_annotation_->get_iou_threshold(),
+        this->ai_prompt_annotation_->get_score_threshold(),
+        100
+    );
+
+    const auto is_new = std::views::iota(0, (int32_t)scores.size()) | std::views::transform([&](const auto &i){ return scores[i] != SCORE_FOR_EXISTING_SHAPE; }) | std::ranges::to<std::vector<bool>>();
+    boxes = std::views::zip(is_new, boxes) | std::views::filter([](const auto &z) { return std::get<0>(z); }) | std::views::transform([](const auto &z) { return std::get<1>(z); }) | std::ranges::to<std::vector<BoundingBoxF>>();
+    scores = std::views::zip(is_new, scores) | std::views::filter([](const auto &z) { return std::get<0>(z); }) | std::views::transform([](const auto &z) { return std::get<1>(z); }) | std::ranges::to<std::vector<float>>();
+    labels = std::views::zip(is_new, labels) | std::views::filter([](const auto &z) { return std::get<0>(z); }) | std::views::transform([](const auto &z) { return std::get<1>(z); }) | std::ranges::to<std::vector<int32_t>>();
+    indices = std::views::zip(is_new, indices) | std::views::filter([](const auto &z) { return std::get<0>(z); }) | std::views::transform([](const auto &z) { return std::get<1>(z); }) | std::ranges::to<std::vector<int32_t>>();
+
+    //if (masks.empty())
     //    masks = [None] * len(boxes)
-    //else:
+    //else
     //    masks = [masks[i] for i in indices]
     //del indices
     //
-    //detections: list[_automation.Detection] = []
-    //for i, (box, score, label, mask) in enumerate(zip(boxes, scores, labels, masks)):
-    //    text: str = texts[label] + "_{:03d}".format(i)
-    //    detections.append(
-    //        _automation.Detection(
-    //            bbox=(
-    //                float(box[0]),
-    //                float(box[1]),
-    //                float(box[2]),
-    //                float(box[3]),
-    //            ),
-    //            mask=mask,
-    //            label=text,
-    //            description=json.dumps(dict(score=score.item(), text=text)),
-    //        )
-    //    )
-    //detections = _automation.suppress_detections_greedy(
-    //    detections=detections,
-    //    iou_threshold=self._ai_text.get_iou_threshold(),
-    //)
-    //shapes: list[Shape] = _automation.shapes_from_detections(
-    //    detections=detections, shape_type=shape_type
-    //)
+    QList<Detection> detections;
+    for (const auto &&[i, zip] : std::views::zip(boxes, scores, labels, masks) | std::views:: enumerate) {
+        const auto &[box, score, label, mask] = zip;
+        std::string text = std::format("{}_{:03d}", texts[label], i);
+        detections.append(
+            Detection{
+                .bbox=BoundingBox{
+                    int(box.xmin),
+                    int(box.ymin),
+                    int(box.xmax),
+                    int(box.ymax),
+                },
+                .mask=mask,
+                .label=text,
+                .description=nlohmann::json{{"score", score}, {"text", text}}.dump(),
+            }
+        );
+    }
+    detections = suppress_detections_greedy(
+        detections,
+        this->ai_prompt_annotation_->get_iou_threshold()
+    );
+    QList<TlShape> shapes = shapes_from_detections(
+        detections, shape_type.toStdString()
+    );
+}
 
     this->slotTaskSubmit();
     const auto image = utils::ImageToMat(this->image_);
     const auto image_id = std::hash<QString>{}(this->image_path_);
-    QList<TlShape> shapes = bbox_from_text::get_shapes_from_texts(this->text_osam_session_.get(), image, image_id, texts);
+    QList<TlShape> shapes = get_shapes_from_texts(this->text_osam_session_.get(), image, image_id, texts);
     this->slotTaskFinish();
 
     this->canvas_widgets_.canvas_->backup_shapes();

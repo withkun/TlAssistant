@@ -10,28 +10,6 @@
 #include "canvas_interaction.h"
 #include "tl_assists/ai_assist_session.h"
 
-// 信号与槽和设计模式中的观察者模式很类似
-// emit
-// signals
-// slot
-
-// 在使用信号与槽机制时, 需要在QObject的子类中添加Q_OBJECT宏
-// 这个宏会在编译过程中使用元对象系统自动生成必要的代码, 以支持信号与槽的运行时连接
-
-//三种信号绑定方式:
-// //1. 函数无参数的时候, 使用宏
-// QObject::connect(qAction, SIGNAL(triggered()), this, SLOT(DealSlot()));
-//
-// //2. 函数无参数的时候, 使用函数指针
-// QObject::connect(qAction, &QAction::triggered, this, &MainWindow::DealSlot);
-//
-// //3. 函数带参数的时候, 使用函数指针
-// void (QAction::*fnSignal)(bool) = &QAction::triggered;
-// void (MainWindow::*fnSlot)() = &MainWindow::DealSlot;
-// QObject::connect(qAction, fnSignal, this, fnSlot);
-//
-// QObject::connect(qAction, SIGNAL(toggled(bool)), this, SLOT(setChecked(bool)));
-
 
 enum class CanvasMode: int32_t {
     CREATE = 0,
@@ -86,6 +64,18 @@ public:
     explicit operator bool() const {
         return !this->points_.empty();
     }
+
+    //bool DraftShape::operator==(const DraftShape &shape) const {
+    //    return (uuid_ == shape.uuid_);
+    //}
+    //
+    //bool DraftShape::operator!=(const DraftShape &shape) const {
+    //    return !(*this == shape);
+    //}
+    //
+    //bool DraftShape::operator<(const DraftShape &shape) const {
+    //    return (uuid_ < shape.uuid_);
+    //}
 };
 
 class Canvas : public QWidget {

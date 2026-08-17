@@ -3,17 +3,13 @@
 #include "common/format_qt.h"
 #include "common/np_utils.h"
 #include "config/app_config.h"
-#include "tl_modules/polygon_from_mask.h"
+#include "tl_widgets/tl_download.h"
 
 #include <QApplication>
 #include <QAbstractScrollArea>
 #include <QWheelEvent>
 #include <memory>
 
-
-bool download_ai_model(const std::string &name, Canvas *) {
-    return true;
-}
 
 static const std::vector<int32_t> _DEFAULT_SHAPE_RGB{0, 255, 0};
 static const Palette _DEFAULT_PALETTE = Palette::from_rgb(_DEFAULT_SHAPE_RGB);

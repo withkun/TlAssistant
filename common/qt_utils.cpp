@@ -32,6 +32,31 @@ std::vector<QColor> label_colormap() {
     return colormap;
 }
 
+// 常见空白字符(C风格isspace范围)
+static constexpr std::string WHITESPACE = " \t\n\r\f\v";
+
+std::string trim(const std::string &s) {
+    if (s.empty()) return s;
+
+    const size_t s_idx = s.find_first_not_of(WHITESPACE);
+    if (s_idx == std::string::npos) return ""; // 全空白
+
+    const size_t e_idx = s.find_last_not_of(WHITESPACE);
+    return s.substr(s_idx, (e_idx - s_idx) + 1);
+}
+
+std::vector<std::string> split(const std::string &s, const char delim) {
+    std::string token;
+    std::stringstream ss(s);
+    std::vector<std::string> tokens;
+    while (std::getline(ss, token, delim)) {
+        token = trim(token);
+        if (token.empty()) continue;
+        tokens.emplace_back(token);
+    }
+    return tokens;
+}
+
 QIcon utils::newIcon(const QString &icon) {
     const QString icons_dir(":/icons/" + icon + ".png");
     return QIcon(icons_dir);

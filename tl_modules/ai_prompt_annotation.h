@@ -20,11 +20,12 @@ public:
     float get_iou_threshold();
 
     std::string get_model_name() const;
-    std::vector<std::string> get_texts_prompt() const;
-
-    void init_ui(const std::string &default_model, const std::function<void()> &on_submit);
+    std::string get_text_prompt() const;
+    std::string get_model_display_name();
 
 private:
+    void init_ui(const std::string &default_model, const std::function<void()> &on_submit);
+
     QWidget                *body_{};
     QLineEdit              *text_input_{};
     QComboBox              *model_combo_{};

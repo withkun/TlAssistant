@@ -14,7 +14,7 @@ public:
     static SamApis &instance();
 
     void register_model(const std::string &name, const FactoryFunc &factory);
-    Model *const get_model_by_name(const std::string &name);
+    Model *get_model_by_name(const std::string &name);
 
     void unregister_all(const std::string &name);
 

@@ -92,9 +92,9 @@ QList<Detection> detections_from_annotations(
     QList<Detection> detections;
     for (auto &annotation : sorted_annotations) {
         BoundingBox bbox;
-        if (annotation.bbox) {
-            auto bb = annotation.bbox;
-            bbox = {bb.x1, bb.y1, bb.x2, bb.y2};
+        if (annotation.bounding_box) {
+            auto bb = annotation.bounding_box;
+            bbox = {bb.xmin, bb.ymin, bb.xmax, bb.ymax};
         }
         detections.append(Detection(bbox, annotation.mask));
     }

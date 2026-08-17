@@ -14,7 +14,7 @@ void SamApis::register_model(const std::string &name, const FactoryFunc &factory
     registry_.emplace(name, std::move(factory));
 }
 
-Model *const SamApis::get_model_by_name(const std::string &name) {
+Model *SamApis::get_model_by_name(const std::string &name) {
     {
         // 并发读取缓存
         std::lock_guard<std::mutex> lock(mutex_);

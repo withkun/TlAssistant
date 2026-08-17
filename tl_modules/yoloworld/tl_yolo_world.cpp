@@ -149,7 +149,7 @@ GenerateResponse YoloWorld::non_maximum_suppression(InferenceSession &session, I
         const auto y1 = static_cast<int32_t>(std::round(std::max(0.0f, std::min(b1, 1.0f * image_embedding.image_h))));
         const auto x2 = static_cast<int32_t>(std::round(std::max(0.0f, std::min(b2, 1.0f * image_embedding.image_w))));
         const auto y2 = static_cast<int32_t>(std::round(std::max(0.0f, std::min(b3, 1.0f * image_embedding.image_h))));
-        annotation.bbox = {x1, y1, x2, y2};
+        annotation.bounding_box = {x1, y1, x2, y2};
         SPDLOG_INFO("===> indices: {}, confidence: {},  bbox: ({:.3f}, {:.3f}), ({:.3f}, {:.3f}),  bbox: ({}, {}), ({}, {})",
                  indices, annotation.score, b0, b1, b2, b3, x1, y1, x2, y2);
     }

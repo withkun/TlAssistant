@@ -15,6 +15,11 @@ extern void fromFile(const std::string &path, std::vector<float> &blob);
 
 inline constexpr int32_t None = std::numeric_limits<int32_t>::min();
 
+
+std::string trim(const std::string &s);
+std::vector<std::string> split(const std::string &s, char delim=',');
+
+
 template <typename T>
 int32_t mult_size(const std::vector<T> &v) {
     return std::accumulate(v.begin(), v.end(), T(1), std::multiplies<T>());

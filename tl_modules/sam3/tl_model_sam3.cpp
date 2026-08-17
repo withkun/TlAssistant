@@ -110,7 +110,7 @@ GenerateResponse Sam3::generate(GenerateRequest &request) {
         const auto y1 = static_cast<int32_t>(std::round(std::max(0.0f, std::min(bboxes.at<float>(n, 1) * image_embedding.image_h, 1.0f * image_embedding.image_h))));
         const auto x2 = static_cast<int32_t>(std::round(std::max(0.0f, std::min(bboxes.at<float>(n, 2) * image_embedding.image_w, 1.0f * image_embedding.image_w))));
         const auto y2 = static_cast<int32_t>(std::round(std::max(0.0f, std::min(bboxes.at<float>(n, 3) * image_embedding.image_h, 1.0f * image_embedding.image_h))));
-        annotation.bbox = {x1, y1, x2, y2};
+        annotation.bounding_box = {x1, y1, x2, y2};
 
         // Scale normalized masks to original image coordinates
         cv::Mat mask = masks.row(n).reshape(1, {mask_h, mask_w});

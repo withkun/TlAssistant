@@ -1,6 +1,10 @@
 #include "shape_builder.h"
 
 
+static const QList<std::string> AiOutputFormat{
+    "rectangle", "polygon", "mask", "circle", "oriented_rectangle"
+};
+
 static TlShape build_shape(
     const std::string &shape_type,
     const QList<QPointF> &points,
@@ -41,7 +45,7 @@ TlShape shape_from_detection(
         auto polygon = compute_polygon_from_mask(detection.mask);
         if (detection.bbox)
             std::ranges::for_each(polygon, [&](auto &p) {
-                p.x += detection.bbox.x1; p.y += detection.bbox.y1;
+                p.x += detection.bbox.xmin; p.y += detection.bbox.ymin;
             });
         if (polygon.size() < 3)
             return {};
@@ -58,10 +62,10 @@ TlShape shape_from_detection(
             return {};
         if (!cv::hasNonZero(detection.mask))
             return {};
-        const auto xmin = int(detection.bbox.x1);
-        const auto ymin = int(detection.bbox.y1);
-        const auto xmax = int(detection.bbox.x2);
-        const auto ymax = int(detection.bbox.y2);
+        const auto xmin = int(detection.bbox.xmin);
+        const auto ymin = int(detection.bbox.ymin);
+        const auto xmax = int(detection.bbox.xmax);
+        const auto ymax = int(detection.bbox.ymax);
         return build_shape(
             "mask",
             {QPointF(xmin, ymin), QPointF(xmax, ymax)},
@@ -107,7 +111,7 @@ QList<QPointF> oriented_rectangle_for_detection(
         const auto corners = compute_oriented_rectangle_from_mask(detection.mask);
         if (!corners.empty()) {
             cv::Point offset_xy = (
-                detection.bbox ? cv::Point(detection.bbox.x1, detection.bbox.y1) : cv::Point(0.0, 0.0)
+                detection.bbox ? cv::Point(detection.bbox.xmin, detection.bbox.ymin) : cv::Point(0.0, 0.0)
             );
             return corners | std::views::transform([&offset_xy](auto &p) { return QPointF(p.x + offset_xy.x, p.y + offset_xy.y); }) | std::ranges::to<QList<QPointF>>();
         }
@@ -126,7 +130,7 @@ Circle circle_for_detection(const Detection &detection) {
         const auto circle = compute_circle_from_mask(detection.mask);
         if (circle) {
             const QPointF offset_xy = (
-                detection.bbox ? QPointF(detection.bbox.x1, detection.bbox.y1) : QPointF(0.0, 0.0)
+                detection.bbox ? QPointF(detection.bbox.xmin, detection.bbox.ymin) : QPointF(0.0, 0.0)
             );
             return Circle{
                 .cx=circle.cx + (float)offset_xy.x(),
@@ -148,15 +152,9 @@ Circle circle_for_detection(const Detection &detection) {
 // Output formats that drop a bbox-only detection (the builder returns None when
 // the mask is absent). Derived from _shape_from_detection so it cannot drift; the
 // probe mirrors the runtime warning condition (a box but no mask).
-//MASK_REQUIRED_SHAPE_TYPES: Final[frozenset[AiOutputFormat]] = frozenset(
-//    shape_type
-//    for shape_type in typing.get_args(AiOutputFormat)
-//    if _shape_from_detection(
-//        detection=Detection(bbox=(0, 0, 1, 1), mask=None), shape_type=shape_type
-//    )
-//    is None
-//)
-
+const QList<std::string> MASK_REQUIRED_SHAPE_TYPES = AiOutputFormat | std::views::filter([](const auto &shape_type) {
+    return static_cast<bool>(shape_from_detection(Detection{.bbox=(0, 0, 1, 1), .mask={}}, shape_type));
+}) | std::ranges::to<QList<std::string>>();
 
 QList<TlShape> shapes_from_detections(
     const QList<Detection> &detections,
