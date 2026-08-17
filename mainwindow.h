@@ -22,10 +22,6 @@
 #include "yaml-cpp/yaml.h"
 
 
-QT_BEGIN_NAMESPACE
-namespace Ui { class MainWindow; }
-QT_END_NAMESPACE
-
 #define _appname_                           tr("tl assistant")
 #define _version_                           "1.0.0.0"
 
@@ -138,8 +134,6 @@ protected:
     void dropEvent(QDropEvent *event) override;
 
 private:
-    Ui::MainWindow                                 *ui_{};
-
     QString                                         config_file_;
     YAML::Node                                      config_;
     QSettings                                       window_state_;

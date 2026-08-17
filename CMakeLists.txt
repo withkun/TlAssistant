@@ -169,7 +169,6 @@ set(AI_SOURCES
 
 set(PROJECT_SOURCES
     mainwindow.h
-    mainwindow.ui
     mainwindow.cpp
     main.cpp
 )

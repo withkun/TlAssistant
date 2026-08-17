@@ -1,5 +1,4 @@
 #include "mainwindow.h"
-#include "ui_mainwindow.h"
 
 #include <memory>
 #include <random>
@@ -54,8 +53,7 @@ MainWindow::MainWindow(
     const YAML::Node &config_overrides,
     const QString &file_or_dir,
     const QString &output_dir
-) : QMainWindow(), ui_(new Ui::MainWindow), window_state_("tl_assistant", "tl_assistant") {
-    ui_->setupUi(this);
+) : QMainWindow(), window_state_("tl_assistant", "tl_assistant") {
     this->setWindowTitle(_appname_);
 
     const AppConfig &appConfig = AppConfig::instance();
@@ -2966,7 +2964,6 @@ QStringList MainWindow::scan_image_files(const QString &root_dir) {
 // User-assisted function.
 //
 MainWindow::~MainWindow() {
-    delete ui_;
     SamApis::instance().unregister_all("");
     AppConfig::instance().save();
 
