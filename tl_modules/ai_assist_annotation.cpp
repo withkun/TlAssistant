@@ -70,9 +70,8 @@ void AiAssistAnnotation::init_ui(
     body_->setLayout(body_layout);
 
     this->model_combo_ = new QComboBox();
-    for (auto &[model_id, model_display, prompts] : ai_models::AI_ASSIST_MODEL_OPTIONS) {
-        this->model_combo_->addItem(model_display, model_id);
-    }
+    for (const auto &option : ai_models::AI_ASSIST_MODEL_OPTIONS)
+        this->model_combo_->addItem(option.display_name, option.model_name);
     body_layout->addWidget(this->model_combo_);
 
     this->output_format_combo_ = new QComboBox();
@@ -93,13 +92,13 @@ void AiAssistAnnotation::init_ui(
 
     this->model_combo_->setCurrentIndex(model_index);
     QObject::connect(this->model_combo_, &QComboBox::currentIndexChanged, [this, on_model_changed](int index) {
-        on_model_changed(this->model_combo_->itemData(index).value<std::string>());
+        on_model_changed(this->model_combo_->itemData(index).toString().toStdString());
     });
 
     this->output_format_combo_->setCurrentIndex(0);
     QObject::connect(this->output_format_combo_, &QComboBox::currentIndexChanged, [this, on_output_format_changed](int index) {
         on_output_format_changed(
-            this->output_format_combo_->itemData(index).value<std::string>()
+            this->output_format_combo_->itemData(index).toString().toStdString()
         );
     });
 
@@ -116,8 +115,8 @@ void AiAssistAnnotation::set_current_model(const QString &model_display) {
 void AiAssistAnnotation::set_point_prompt_mode(bool enabled) {
     this->is_point_prompt_mode_ = enabled;
     auto model = qobject_cast<QStandardItemModel *>(this->model_combo_->model());
-    for (const auto [index, option] : ai_models::AI_ASSIST_MODEL_OPTIONS | std::views::enumerate) {
-        auto item = model->item(index);
+    for (const auto &[index, option] : ai_models::AI_ASSIST_MODEL_OPTIONS | std::views::enumerate) {
+        const auto item = model->item(index);
         //assert item is not None
         item->setEnabled(!enabled || option.supports_point_prompts);
     }

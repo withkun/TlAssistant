@@ -112,7 +112,7 @@ MainWindow::MainWindow(
     this->ai_buttons_highlighted_ = false;
 
     this->ai_prompt_annotation_ = new AiPromptAnnotation(
-        appConfig.ai_prompt_name_, [this] { this->submit_ai_prompt(); }, this
+        QString::fromStdString(appConfig.ai_prompt_name_), [this] { this->submit_ai_prompt(); }, this
     );
     this->ai_prompt_annotation_->setEnabled(false);
 

@@ -10,7 +10,7 @@
 class AiPromptAnnotation : public QWidget {
     Q_OBJECT
 public:
-    explicit AiPromptAnnotation(const std::string &default_model, const std::function<void()> &on_submit, QWidget *parent = nullptr);
+    explicit AiPromptAnnotation(const QString &default_model, const std::function<void()> &on_submit, QWidget *parent=nullptr);
     ~AiPromptAnnotation() override = default;
 
     void setEnabled(bool a0);
@@ -24,7 +24,7 @@ public:
     std::string get_model_display_name();
 
 private:
-    void init_ui(const std::string &default_model, const std::function<void()> &on_submit);
+    void init_ui(const QString &default_model, const std::function<void()> &on_submit);
 
     QWidget                *body_{};
     QLineEdit              *text_input_{};

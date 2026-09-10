@@ -9,7 +9,7 @@
 
 
 namespace {
-std::vector<std::pair<std::string, std::string>> available_models_{
+QList<std::pair<QString, QString>> available_models_{
     {"sam3:latest", "SAM3 (smart)"},
     {"yoloworld:latest", "YOLO-World (fast)"},
 };
@@ -20,13 +20,13 @@ constexpr float default_iou_threshold_ = 0.5;
 }
 
 
-AiPromptAnnotation::AiPromptAnnotation(const std::string &default_model,
+AiPromptAnnotation::AiPromptAnnotation(const QString &default_model,
                                        const std::function<void()> &on_submit,
                                        QWidget *parent) : QWidget(parent) {
-    this->init_ui(default_model.empty() ? default_model_name_ : default_model, on_submit);
+    this->init_ui(default_model.isEmpty() ? default_model_name_ : default_model, on_submit);
 }
 
-void AiPromptAnnotation::init_ui(const std::string &default_model, const std::function<void()> &on_submit) {
+void AiPromptAnnotation::init_ui(const QString &default_model, const std::function<void()> &on_submit) {
     auto *const layout = new QVBoxLayout();
     layout->setContentsMargins(4, 4, 4, 4);
     layout->setSpacing(2);
@@ -71,9 +71,8 @@ void AiPromptAnnotation::init_ui(const std::string &default_model, const std::fu
     settings_layout->setSpacing(4);
 
     this->model_combo_ = new QComboBox();
-    for (auto &[model_id, model_display] : available_models_) {
-        model_combo_->addItem(QString::fromStdString(model_display), QString::fromStdString(model_id));
-    }
+    for (const auto &[model_id, model_display] : available_models_)
+        model_combo_->addItem(model_display, model_id);
     int32_t model_index = 0;
     for (auto i = 0; i < available_models_.size(); ++i) {
         if (available_models_[i].first == default_model) {
