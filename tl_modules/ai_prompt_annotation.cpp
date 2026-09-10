@@ -14,7 +14,7 @@ std::vector<std::pair<std::string, std::string>> available_models_{
     {"yoloworld:latest", "YOLO-World (fast)"},
 };
 
-const char *default_model_name_ = "yoloworld:latest";
+const char *default_model_name_ = "sam3:latest";
 constexpr float default_score_threshold_ = 0.1;
 constexpr float default_iou_threshold_ = 0.5;
 }
@@ -25,8 +25,6 @@ AiPromptAnnotation::AiPromptAnnotation(const std::string &default_model,
                                        QWidget *parent) : QWidget(parent) {
     this->init_ui(default_model.empty() ? default_model_name_ : default_model, on_submit);
 }
-
-AiPromptAnnotation::~AiPromptAnnotation() = default;
 
 void AiPromptAnnotation::init_ui(const std::string &default_model, const std::function<void()> &on_submit) {
     auto *const layout = new QVBoxLayout();

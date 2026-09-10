@@ -1,6 +1,10 @@
 #include "shape_builder.h"
 
 
+static const QList<std::string> AiPromptKind{
+    "points", "box"
+};
+
 static const QList<std::string> AiOutputFormat{
     "rectangle", "polygon", "mask", "circle", "oriented_rectangle"
 };

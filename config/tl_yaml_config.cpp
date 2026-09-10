@@ -1,54 +1,76 @@
 #include "tl_yaml_config.h"
+#include "tl_yaml_loader.h"
+#include "shape_color.h"
 #include "spdlog/spdlog.h"
 #include "common/format_qt.h"
-#include "nlohmann/detail/input/parser.hpp"
-#include "spdlog/fmt/bundled/base.h"
 
 #include <QFile>
-#include <QTextStream>
+#include <QVariant>
+#include <QFileInfo>
 #include <QStandardPaths>
+#include <QCoreApplication>
+#include <QRegularExpression>
 
 
-// default_config_file = os.path.join(os.path.expanduser("~"), ".labelmerc")
-// 'c:/Users/njtl007/.labelmerc'
-YAML::Node get_config() {
-    const auto HomeLocation = QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
-    YAML::Node config = YAML::LoadFile("C:/Users/njtl007/.labelmerc");
-    if (config["labels"] && config["validate_label"]) {
-        return YAML::Node();
-    }
-
-    return config;
-}
-
-void update_dict(YAML::Node target_dict, const YAML::Node &new_dict, const std::function<void(std::string k, std::string v)> validate_item) {
-    //for (auto it = new_dict.begin(); it != new_dict.end(); ++it) {
-    for (const auto it : new_dict) {
-        const auto key = it.first.as<std::string>();
-        const auto value = it.second;
-        //if (validate_item)
-        //    validate_item(key, value);
-        if (!target_dict[key].IsDefined())
+void update_dict(
+    QMap<QString, QVariant> &target_dict,
+    const QMap<QString, QVariant> &new_dict,
+    const std::function<void(QString k, QVariant v)> &validate_item
+) {
+    for (const auto [key, value] : new_dict.asKeyValueRange()) {
+        if (validate_item)
+            validate_item(key, value);
+        if (!target_dict.contains(key))
             throw std::invalid_argument("Unexpected key in config: {key}");
-        if (target_dict[key].IsMap() && value.IsMap())
-            update_dict(target_dict[key], value, validate_item);
-        else
+        if (!target_dict[key].canConvert<QMap<QString, QVariant>>()) {
             target_dict[key] = value;
+            continue;
+        }
+
+        // target_dict[key] is a section, so the override must be a mapping.
+        if (value.isNull())
+            // An empty section (e.g. a bare `shortcuts:`) keeps its defaults
+            // instead of wiping the whole section.
+            continue;
+        if (!value.canConvert<QMap<QString, QVariant>>())
+            // A non-mapping override (e.g. `shortcuts: oops`) would wipe the
+            // section with a scalar and crash the app downstream; surface it as
+            // a config error instead.
+            throw std::invalid_argument(
+                "Config section {key!r} must be a mapping, "
+                "but got {type(value).__name__}: {value!r}"
+            );
+        auto target = target_dict[key].toMap();
+        update_dict(
+            target,
+            value.toMap(),
+            validate_item
+        );
+        target_dict[key] = target;
     }
 }
 
-const auto validate_config_item = [](auto key, auto value) {
-    //if (key == "validate_label" and value not in [None, "exact"])
-    //    throw std::invalid_argument("Unexpected value for config key 'validate_label': {value}");
-    //if (key == "shape_color" and value not in [None, "auto", "manual"])
-    //    throw std::invalid_argument("Unexpected value for config key 'shape_color': {value}");
-    //if (key == "labels" and value is not None and len(value) != len(set(value)))
-    //    throw std::invalid_argument("Duplicates are detected for config key 'labels': {value}");
-};
+void validate_config_item(const QString &key, const QVariant &value) {
+    if (key == "validate_label" && (!value.isNull() && value != "exact"))
+        throw std::invalid_argument("Unexpected value for config key 'validate_label': {value}");
+    if (key == "labels" && value != "") {
+        if (!value.canConvert<QList<QString>>())
+            throw std::invalid_argument(
+                "Config key 'labels' must be a list, "
+                "but got {type(value).__name__}: {value!r}"
+            );
+        auto list = value.value<QList<QString>>();
+        if (list.removeDuplicates() != 0)
+            throw std::invalid_argument(
+                "Duplicates are detected for config key 'labels': {value}"
+            );
+    }
+}
 
-void migrate_config_from_file(YAML::Node &config_from_yaml) {
-    bool keep_prev_brightness = YAML_POP<bool>(config_from_yaml, "keep_prev_brightness", false);
-    bool keep_prev_contrast = YAML_POP<bool>(config_from_yaml, "keep_prev_contrast", false);
+void migrate_config_from_file(QMap<QString, QVariant> &config_from_yaml) {
+    migrate_shape_color(config_from_yaml);
+    bool keep_prev_brightness = config_from_yaml.value("keep_prev_brightness", false).toBool(); config_from_yaml.remove("keep_prev_brightness");
+    bool keep_prev_contrast = config_from_yaml.value("keep_prev_contrast", false).toBool(); config_from_yaml.remove("keep_prev_contrast");
     if (keep_prev_brightness || keep_prev_contrast) {
         SPDLOG_INFO(
             "Migrating old config: keep_prev_brightness={} or keep_prev_contrast={} "
@@ -58,107 +80,135 @@ void migrate_config_from_file(YAML::Node &config_from_yaml) {
         );
         config_from_yaml["keep_prev_brightness_contrast"] = true;
     }
-
-    if (config_from_yaml["store_data"].IsDefined()) {
+    if (config_from_yaml.contains("store_data")) {
         SPDLOG_INFO("Migrating old config: store_data -> with_image_data");
-        config_from_yaml["with_image_data"] = config_from_yaml["store_data"];
-        config_from_yaml.remove("store_data");
+        config_from_yaml["with_image_data"] = config_from_yaml["store_data"]; config_from_yaml.remove("store_data");
     }
-
-    if (config_from_yaml["shortcuts"]["add_point_to_edge"].IsDefined()) {
+    if (config_from_yaml.contains("logger_level")) {
+        SPDLOG_INFO("Migrating old config: removing logger_level");
+        config_from_yaml.remove("logger_level");
+    }
+    // A malformed section (e.g. `shortcuts: oops`) is left untouched here so the
+    // merge in _update_dict reports it as a config error instead of crashing.
+    auto shortcuts = config_from_yaml.value("shortcuts", {}).toMap();
+    //if not isinstance(shortcuts, dict):
+    //    shortcuts = {}
+    if (shortcuts.remove("add_point_to_edge"))
         SPDLOG_INFO("Migrating old config: removing shortcuts.add_point_to_edge");
-        config_from_yaml["shortcuts"].remove("add_point_to_edge");
+
+    const auto ai = config_from_yaml.value("ai", {}).toMap();
+    const auto model_name = ai.value("default", "").toString();
+    if (
+        const auto m = QRegularExpression("^SegmentAnything \\((.*)\\)$").match(model_name);
+        m.hasMatch()
+    ) {
+        auto model_name_new = QString("Sam (%1)").arg(m.captured(1));
+        SPDLOG_INFO(
+            "Migrating old config: ai.default={} -> ai.default={}",
+            model_name,
+            model_name_new
+        );
+        ai["default"] = model_name_new;
     }
-
-    //if (model_name := config_from_yaml.get("ai", {}).get("default")) and (
-    //    m := re.match(r"^SegmentAnything \((.*)\)$", model_name)
-    //):
-    //    model_name_new: str = f"Sam ({m.group(1)})"
-    //    logger.info(
-    //        "Migrating old config: ai.default={!r} -> ai.default={!r}",
-    //        model_name,
-    //        model_name_new,
-    //    )
-    //    config_from_yaml["ai"]["default"] = model_name_new
-
     // Migrate polygon shortcut keys to shape
-    std::map<std::string, std::string> POLYGON_TO_SHAPE_RENAMES = {
-        {"edit_polygon", "edit_shape"},
-        {"delete_polygon", "delete_shape"},
-        {"duplicate_polygon", "duplicate_shape"},
-        {"copy_polygon", "copy_shape"},
-        {"paste_polygon", "paste_shape"},
-        {"show_all_polygons", "show_all_shapes"},
-        {"hide_all_polygons", "hide_all_shapes"},
-        {"toggle_all_polygons", "toggle_all_shapes"},
+    QMap<QString, QString> POLYGON_TO_SHAPE_RENAMES = {
+        { "edit_polygon", "edit_shape" },
+        { "delete_polygon", "delete_shape" },
+        { "duplicate_polygon", "duplicate_shape" },
+        { "copy_polygon", "copy_shape" },
+        { "paste_polygon", "paste_shape" },
+        { "show_all_polygons", "show_all_shapes" },
+        { "hide_all_polygons", "hide_all_shapes" },
+        { "toggle_all_polygons", "toggle_all_shapes" },
     };
-    //shortcuts = config_from_yaml["shortcuts"];
-    for (auto [old_key, new_key] : POLYGON_TO_SHAPE_RENAMES) {
-        if (config_from_yaml["shortcuts"][old_key].IsDefined() && !config_from_yaml["shortcuts"][new_key].IsDefined()) {
+    for (auto [old_key, new_key] : POLYGON_TO_SHAPE_RENAMES.asKeyValueRange()) {
+        if (!shortcuts.contains(old_key))
+            continue;
+        auto old_value = shortcuts.value(old_key); shortcuts.remove(old_key);
+        if (shortcuts.contains(new_key)) {
             SPDLOG_INFO(
-                "Migrating old config: shortcuts.{} -> shortcuts.{}",
+                "Migrating old config: dropping shortcuts.{}={} superseded by "
+                "shortcuts.{}={}",
                 old_key,
-                new_key
+                old_value.toString(),
+                new_key,
+                shortcuts[new_key].toString()
             );
-            config_from_yaml["shortcuts"][new_key] = config_from_yaml["shortcuts"][old_key];
-            config_from_yaml["shortcuts"].remove(old_key);
+            continue;
         }
+        SPDLOG_INFO(
+            "Migrating old config: shortcuts.{} -> shortcuts.{}",
+            old_key,
+            new_key
+        );
+        shortcuts[new_key] = old_value;
     }
-}
-
-
-std::string get_user_config_file(bool create_if_missing=true) {
-    //user_config_file: str = osp.join(osp.expanduser("~"), ".labelmerc")
-    //if not osp.exists(user_config_file) and create_if_missing:
-    //    try:
-    //        with open(user_config_file, "w") as f:
-    //            f.write(
-    //                "# Labelme config file.\n"
-    //                "# Only add settings you want to override.\n"
-    //                "# For all available options and defaults, see:\n"
-    //                "#   https://github.com/wkentaro/labelme/blob/main/labelme/config/default_config.yaml\n"
-    //                "#\n"
-    //                "# Example:\n"
-    //                "# with_image_data: true\n"
-    //                "# auto_save: false\n"
-    //                "# labels: [cat, dog]\n"
-    //            )
-    //    except Exception:
-    //        logger.warning("Failed to save config: {!r}", user_config_file)
-    return "c:/Users/njtl007/.labelmerc"; //user_config_file;
-}
-
-YAML::Node TlConfig::load_config(const std::string &config_file, const YAML::Node &config_overrides) {
-    YAML::Node config;
-    try {
-        QString content;
-        QFile file(":/config/default_config.yaml");
-        if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-            QTextStream in(&file);
-            content = in.readAll();
-        }
-        config = YAML::Load(content.toStdString());
-    } catch (const YAML::Exception &e) {
-        SPDLOG_ERROR("Load default config fault: {}", e.what());
+    // A malformed canvas/crosshair section is left untouched so the merge in
+    // _update_dict reports it as a config error instead of crashing.
+    auto canvas = config_from_yaml.value("canvas", {}).toMap();
+    auto crosshair = canvas.value("crosshair", {}).toMap();
+    //if not isinstance(crosshair, dict):
+    //    crosshair = {}
+    auto ai_polygon = crosshair.value("ai_polygon", {}).toString();
+    auto ai_mask = crosshair.value("ai_mask", {}).toString();
+    if (!ai_polygon.isEmpty() || !ai_mask.isEmpty()) {
+        SPDLOG_INFO(
+            "Migrating old config: canvas.crosshair.ai_polygon={} or "
+            "canvas.crosshair.ai_mask={} -> canvas.crosshair.ai_points_to_shape",
+            ai_polygon,
+            ai_mask
+        );
+        if (!crosshair.contains("ai_points_to_shape"))
+            crosshair["ai_points_to_shape"] = !ai_polygon.isEmpty() || !ai_mask.isEmpty();
     }
 
-    if (!config_file.empty()) {
-        YAML::Node config_from_yaml;
+    // 需要把更新后的数据设置回去.
+    canvas["crosshair"] = crosshair;
+    config_from_yaml["canvas"] = canvas;
+    config_from_yaml["shortcuts"] = shortcuts;
+    config_from_yaml["ai"] = ai;
+}
+
+QString get_user_config_file(bool create_if_missing) {
+    QString user_config_path = QCoreApplication::applicationDirPath() + "/.labelmerc";
+    if (!QFileInfo::exists(user_config_path))
+        return user_config_path;
+
+    user_config_path = QStandardPaths::writableLocation(QStandardPaths::HomeLocation) + "/.labelmerc";
+    if (!QFileInfo::exists(user_config_path) && create_if_missing)
         try {
-            config_from_yaml = YAML::LoadFile(config_file);
-        } catch (const YAML::Exception &e) {
-            SPDLOG_ERROR("Load user config fault: {}", e.what());
+            if (QFile file(user_config_path); file.open(QIODevice::WriteOnly | QIODevice::Text))
+                file.close();
+        } catch (std::exception &e) {
+            SPDLOG_WARN("Failed to save config: {}", user_config_path);
         }
+    return user_config_path;
+}
+
+QMap<QString, QVariant> TlConfig::load_config(const QString &config_file, const QMap<QString, QVariant> &cfg_overrides) {
+    QMap<QString, QVariant> config;
+    if (QFile file(":/config/default_config.yaml"); file.open(QIODevice::ReadOnly | QIODevice::Text))
+        config = YamlLoader::safe_load(YAML::Load(QTextStream(&file).readAll().toStdString()));
+
+    if (QFileInfo::exists(config_file)) {
+        const auto f = YAML::LoadFile(config_file.toStdString());
+        auto config_from_yaml = YamlLoader::safe_load(f);
 
         migrate_config_from_file(config_from_yaml);
+        if (config_from_yaml.contains("shape_color"))
+            validate_shape_color(config_from_yaml["shape_color"]);
         update_dict(config, config_from_yaml, validate_config_item);
     }
 
+    auto config_overrides = cfg_overrides;
+    migrate_shape_color(config_overrides);
+    if (config_overrides.contains("shape_color"))
+        validate_shape_color(config_overrides["shape_color"]);
     update_dict(config, config_overrides, validate_config_item);
 
-    if (config["labels"].IsDefined() && !config["validate_label"].IsDefined()) {
+    if (!config.contains("labels") && config["validate_label"].isValid())
         throw std::invalid_argument("labels must be specified when validate_label is enabled");
-    }
+    validate_shape_color(config["shape_color"]);
 
     return config;
 }

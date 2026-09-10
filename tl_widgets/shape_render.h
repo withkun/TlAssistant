@@ -31,7 +31,7 @@ public:
     QColor hvertex_fill_;
 
     //@classmethod
-    static Palette from_rgb(const std::vector<int32_t> &rgb);
+    static Palette from_rgb(const std::tuple<int, int, int> &rgb);
 
     explicit operator bool() const {
         return line_.isValid() || fill_.isValid() ||

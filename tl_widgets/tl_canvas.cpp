@@ -11,7 +11,7 @@
 #include <memory>
 
 
-static const std::vector<int32_t> _DEFAULT_SHAPE_RGB{0, 255, 0};
+static const std::tuple<int, int, int> _DEFAULT_SHAPE_RGB{0, 255, 0};
 static const Palette _DEFAULT_PALETTE = Palette::from_rgb(_DEFAULT_SHAPE_RGB);
 
 
@@ -59,13 +59,6 @@ DraftShape DraftShape::pop_point() {
     return *this;
 }
 
-void DraftShape::clear() {
-    this->points_.clear();
-    this->point_labels_.clear();
-    this->shape_type_.clear();
-    this->closed_ = false;
-}
-
 static TlShape draft_to_shape(const DraftShape &draft) {
     return TlShape{
         draft.shape_type_,
@@ -77,10 +70,10 @@ static TlShape draft_to_shape(const DraftShape &draft) {
 
 static DraftShape shape_to_draft(const TlShape &shape) {
     return DraftShape{
-        shape.shape_type_,
-        shape.points_,
-        shape.point_labels_,
-        shape.closed_
+        .shape_type_=shape.shape_type_,
+        .points_=shape.points_,
+        .point_labels_=shape.point_labels_,
+        .closed_=shape.closed_
     };
 }
 
@@ -102,6 +95,7 @@ static const std::set<QString> AI_CREATE_MODES {
     "ai_points_to_shape",
     "ai_box_to_shape",
 };
+
 
 static std::map<QString, QString> CREATE_MODE_TO_SHAPE_TYPE {     // Final[dict[_CreateMode, ShapeType]]
     {"polygon",             "polygon"             },
@@ -177,6 +171,8 @@ Canvas::Canvas(const float epsilon,
     this->palette_cache_                = QMap<QString, Palette>{};
 
     this->ai_assist_session_            = nullptr;
+    this->ai_suppress_existing_shape_matches_ = false;
+    this->ai_existing_shape_highlights_.clear();
 
     //def __init__(self, *args: Any, **kwargs: Any) -> None:  # noqa: ANN401
     this->epsilon_                      = epsilon;
@@ -219,6 +215,8 @@ Canvas::Canvas(const float epsilon,
     this->scale_                        = 1.0;
     this->ai_assist_session_            = std::make_unique<AiAssistSession>(this);
     this->ai_inference_failed_          = false;
+    this->ai_suppress_existing_shape_matches_ = false;
+    this->ai_existing_shape_highlights_ = {};
     this->snapping_                     = true;
     this->hovered_shape_is_selected_    = false;
     this->painter_                      ;
@@ -385,12 +383,48 @@ std::string Canvas::get_ai_model_name() {
 }
 
 void Canvas::set_ai_model_name(const std::string &model_name) {
+    if (this->ai_assist_session_->model_name_ == model_name)
+        return;
     this->ai_assist_session_->model_name_ = model_name;
+    this->clear_ai_existing_shape_highlights();
     AppConfig::instance().ai_assist_name_ = model_name;
 }
 
 void Canvas::set_ai_output_format(const std::string &output_format) {
+    if (this->ai_assist_session_->output_format_ == output_format)
+        return;
     this->ai_assist_session_->output_format_ = output_format;
+    this->clear_ai_existing_shape_highlights();
+}
+
+void Canvas::set_ai_existing_shape_suppression(bool enabled) {
+    if (this->ai_suppress_existing_shape_matches_ == enabled)
+        return;
+    this->ai_suppress_existing_shape_matches_ = enabled;
+    this->clear_ai_existing_shape_highlights();
+}
+
+void Canvas::propose_ai_shapes(
+    QString &prompt_kind,
+    QList<QPointF> &points,
+    QList<int32_t> &point_labels
+) {
+    //image: np.ndarray = _utils.img_qt_to_rgb_arr(img_qt=self.pixmap.toImage())
+    //return self._ai_assist_session.propose_shapes(
+    //    image=image,
+    //    image_id=str(self._pixmap_hash),
+    //    prompt_kind=prompt_kind,
+    //    points=np.array([[p.x(), p.y()] for p in points]),
+    //    point_labels=np.array(point_labels),
+    //    existing_shapes=(
+    //        self.shapes if self._ai_suppress_existing_shape_matches else []
+    //    ),
+    //    image_size=(
+    //        None
+    //        if self._allow_out_of_bounds_points
+    //        else (image.shape[1], image.shape[0])
+    //    ),
+    //)
 }
 
 QList<TlShape> Canvas::shapes_from_ai_points(
@@ -1769,6 +1803,17 @@ void Canvas::cancel_current_shape() {
     this->update();
 }
 
+void Canvas::set_ai_existing_shape_highlights(const QList<TlShape> &shapes) {
+    this->ai_existing_shape_highlights_ = shapes;
+}
+
+void Canvas::clear_ai_existing_shape_highlights() {
+    if (this->ai_existing_shape_highlights_.empty())
+        return;
+    this->set_ai_existing_shape_highlights({});
+    this->update();
+}
+
 // Required by QScrollArea: it queries these to compute the
 // scrollable viewport whenever adjustSize() is called.
 QSize Canvas::compute_canvas_size() const {
@@ -2022,6 +2067,9 @@ void Canvas::reset_state() {
     this->hovered_edge_ = None;
     this->last_hovered_edge_ = None;
     this->hovered_rotation_ = None;
+    if (this->ai_assist_session_) {
+        this->ai_assist_session_->clear();
+    }
     this->update();
 }
 

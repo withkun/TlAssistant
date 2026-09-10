@@ -19,6 +19,7 @@ inline constexpr int32_t None = std::numeric_limits<int32_t>::min();
 std::string trim(const std::string &s);
 std::vector<std::string> split(const std::string &s, char delim=',');
 
+void update_flags(QMap<QString, bool> &flags, const QMap<QString, bool> &overrides);
 
 template <typename T>
 int32_t mult_size(const std::vector<T> &v) {
@@ -70,7 +71,7 @@ using QKey = std::set<QString>;
 
 class utils {
   public:
-    static QIcon newIcon(const QString &icon);
+    static QIcon new_icon(const QString &icon);
 
     static QValidator *labelValidator();
 
@@ -106,5 +107,7 @@ class utils {
     static QByteArray img_arr_to_data(const cv::Mat &img_data);
 
     static cv::Mat img_b64_to_arr(const std::string &b64_string);
+
+    static void apply_color_theme(const QString &color_theme);
 };
 #endif //__INC_QT_UTILS_H

@@ -23,8 +23,8 @@ QString VertexHighlight::point_type() const {
 }
 
 //@classmethod
-Palette Palette::from_rgb(const std::vector<int32_t> &rgb) {
-    const int32_t r = rgb[0], g = rgb[1], b = rgb[2];
+Palette Palette::from_rgb(const std::tuple<int, int, int> &rgb) {
+    const int32_t r = std::get<0>(rgb), g = std::get<1>(rgb), b = std::get<2>(rgb);
     return Palette{
         .line_=QColor(r, g, b),
         .fill_=QColor(r, g, b, 128),

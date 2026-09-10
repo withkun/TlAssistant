@@ -16,6 +16,7 @@
 #include "tl_widgets/zoom_widget.h"
 #include "tl_widgets/tl_train_widget.h"
 #include "tl_widgets/status_stats.h"
+#include "tl_widgets/settings_dialog.h"
 #include "tl_widgets/shape_clipboard.h"
 #include "tl_modules/ai_assist_annotation.h"
 #include "tl_modules/ai_prompt_annotation.h"
@@ -46,9 +47,9 @@ struct DockWidgets {
     QDockWidget                            *flag_dock_{};                               // QtWidgets.QDockWidget
     QListWidget                            *flag_list_{};                               // QtWidgets.QListWidget
     QDockWidget                            *shape_dock_{};                              // QtWidgets.QDockWidget
-    ShapeListView                          *shape_list_{};                              // LabelListWidget
+    LabelListWidget                        *shape_list_{};                              // LabelListWidget
     QDockWidget                            *label_dock_{};                              // QtWidgets.QDockWidget
-    LabelList                              *label_list_{};                              // UniqueLabelQListWidget
+    UniqueLabelList                        *label_list_{};                              // UniqueLabelQListWidget
     QDockWidget                            *file_dock_{};                               // QtWidgets.QDockWidget
     QLineEdit                              *file_search_{};                             // QtWidgets.QLineEdit
     QListWidget                            *file_list_{};                               // QtWidgets.QListWidget
@@ -122,7 +123,7 @@ class MainWindow : public QMainWindow {
     Q_OBJECT
 public:
     MainWindow(const QString &config_file,
-               const YAML::Node &config_overrides,
+               const QMap<QString, QVariant> &config_overrides,
                const QString &file_or_dir,
                const QString &output_dir);
     ~MainWindow() override;
@@ -135,7 +136,7 @@ protected:
 
 private:
     QString                                         config_file_;
-    YAML::Node                                      config_;
+    QMap<QString, QVariant>                         config_;
     QSettings                                       window_state_;
     QByteArray                                      default_state_;
     QString                                         output_dir_;
@@ -147,25 +148,28 @@ private:
     QList<TlShape>                                  copied_shapes_;
     ShapeClipboard                                 *shape_clipboard_{};
     LabelDialog                                    *label_dialog_{};
-
-    QMap<Qt::Orientation, QMap<QString, int32_t>>   scroll_values_;
+    SettingsDialog                                 *settings_dialog_{};
+    bool                                            is_settings_editable_{false};
 
     ZoomMode                                        zoom_mode_{ZoomMode::FIT_WINDOW};
     CanvasWidgets                                   canvas_widgets_;
     StatusBarWidgets                                status_bar_;
     DockWidgets                                     docks_;
     Actions                                         actions_;
+    QMap<QList<QString>, QAction *>                 persistent_actions_;
     Menus                                           menus_;
 
     QMap<QString, std::pair<ZoomMode, float>>       zoom_values_;
     QMap<QString, std::pair<int32_t, int32_t>>      brightness_contrast_values_;
+    QMap<Qt::Orientation, QMap<QString, float>>     scroll_values_;
 
     QImage                                          image_;
     AnnotationEx                                    annotation_;
+    QString                                         last_failed_auto_save_path_;
     QString                                         image_path_;
+    QString                                         file_list_image_path_;
+    QStringList                                     loaded_image_paths_;
     QString                                         prev_image_path_;
-    QByteArray                                      imageData_;
-    QByteArray                                      other_data_;
     QString                                         label_file_path_;
 
     std::string                                     sam_model_name_{"efficientsam:latest"};
@@ -190,13 +194,14 @@ private:
     StatusBarWidgets setup_status_bar();
     CanvasWidgets setup_canvas();
     DockWidgets setup_dock_widgets();
-    QString load_config(QString config_file, const YAML::Node &config_overrides);
+    QString load_config(QString config_file, const QMap<QString, QVariant> &config_overrides);
     QMenu *menu(const QString &title, const std::list<QObject *> &actions={});
     bool has_no_shapes() const;
     void populate_mode_actions();
     QString get_window_title(bool dirty);
     void mark_dirty();
     void mark_clean();
+    void reset_label_file_actions();
     void update_action_states(bool value=true);
     void show_status_message(const QString &message, int32_t delay=5000);
     void submit_ai_prompt();
@@ -210,24 +215,26 @@ private:
     bool validate_label(const QString &label);
     void edit_label(bool value=false);
     void on_file_search_changed();
-    void file_list_item_selection_changed();
+    void load_selected_image(QListWidgetItem *current_item, QListWidgetItem *previous_item);
     void on_shape_selection_changed(const QList<int32_t> &selected_shapes);
     void add_label(const TlShape &shape);
-    std::vector<int32_t> get_rgb_by_label(const QString &label, LabelList *unique_label_list);
+    std::tuple<int, int, int> get_rgb_by_label(const QString &label, UniqueLabelList *unique_label_list);
     void remove_labels(const QList<TlShape> &shapes);
     void load_shapes(const QList<TlShape> &shapes, bool replace=true);
-    void load_flags(const YAML::Node &flags, QListWidget *widget) const;
-    bool save_labels(const QString &label_path);
+    void load_flags(const QMap<QString, bool> &flags, QListWidget *widget) const;
+    bool save_labels(const QString &label_path, bool show_error=true);
     void insert_shapes(const QList<TlShape> &shapes);
     void label_selection_changed();
-    void on_label_item_changed(ShapeListItem *item);
+    void on_label_item_changed(LabelListItem *item);
     void on_label_order_changed();
     void on_new_shape();
     void on_inference_produced_no_shapes();
     void on_inference_failed(const QString &message);
+    void on_point_prompt_rejected(const QString &model_name);
     void on_scroll_request(int32_t delta, Qt::Orientation orientation);
     void on_pan_request(const QPoint &step);
     void set_scroll_value(Qt::Orientation orientation, float value);
+    void remember_current_viewport();
     void set_zoom(int32_t value, QPointF pos=QPointF());
     void set_zoom_to_original();
     void add_zoom(float increment=1.1, const QPointF &pos=QPointF());
@@ -239,15 +246,15 @@ private:
     void on_brightness_contrast_changed(const QImage &image);
     void open_brightness_contrast_dialog(bool value=false, bool is_initial_load=false);
     void toggle_shape_visibility(int32_t value);
-    AnnotationEx open_label_file_into_state(const QString &label_path);
-    bool open_image_into_state(const QString &image_path);
-    void load_file(const QString &image_or_label_path);
+    AnnotationEx read_annotation_file(const QString &label_path);
+    AnnotationEx read_image_as_annotation(const QString &image_path);
+    void restore_file_list_state(QListWidgetItem *item);
+    bool load_file(QString image_or_label_path);
     //def resizeEvent(self, a0: QtGui.QResizeEvent) -> None:
     void paint_canvas();
     void adjust_scale();
     float fit_window_scale() const;
     float fit_width_scale() const;
-    void set_save_image_with_data(bool enabled);
     void reset_layout();
     //def closeEvent(self, a0: QtGui.QCloseEvent) -> None:
     //def dragEnterEvent(self, a0: QtGui.QDragEnterEvent) -> None:
@@ -263,9 +270,16 @@ private:
     bool confirm_deletion(const QString &message);
     void delete_file();
     bool is_settings_editable();
-    LabelDialog *make_label_dialog();
-    bool on_setting_changed(const QString &key_path, QObject value);
-    void apply_to_live_widgets(const QString &key_path);
+    LabelDialog *make_label_dialog(const QList<QString> &label_history={});
+    void connect_persistent_actions();
+    void on_ai_model_changed(const std::string &model_id);
+    void set_point_prompt_mode(bool enabled);
+    void set_setting_value(const QList<QString> &key_path, const QVariant &value);
+    QVariant read_setting_value(const QList<QString> &key_path);
+    bool apply_setting_change(const QList<QString> &key_path, QVariant value);
+    bool try_set_overrides(const std::tuple<QList<QString>, QVariant> &overrides);
+    void sync_setting_controls(const QList<QString> &key_path);
+    void apply_to_live_widgets(const QList<QString> &key_path);
     QMap<QString, bool> read_flag_dock_states();
     void open_settings();
     void open_config_file();
@@ -282,22 +296,27 @@ private:
     void open_dir_with_dialog(bool value=false);
     QStringList image_list() const;
     void import_dropped_image_files(const QStringList &image_files);
-    void import_images_from_dir(const QString &root_dir, const QString &pattern="");
+    void import_images_from_dir(const QString &root_dir);
+    void refresh_file_list();
     void update_status_stats(const QPointF &mouse_pos);
 
     static QList<TlShape> shapes_from_dicts(const QList<ShapeDict> &shape_dicts, const QMap<QString, QList<QString>> &label_flags);
     static QString resolve_text_annotation_shape_type(const QString &create_mode, const QString &ai_output_format);
-    static std::vector<int32_t> rgb_from_colormap_id(int32_t label_id);
-    static std::vector<int32_t> rgb_from_label_colors(const std::string &label, const std::map<std::string, std::vector<int32_t>> &label_colors);
     static bool is_valid_label(const QString &label, const QStringList &existing_labels, const QString &policy);
     static QString format_window_title(const QString &image_path, int32_t file_index, int32_t file_count, const QImage &image, bool dirty);
     static QString resolve_label_path(const QString &image_or_label_path, const QString &output_dir="");
+    static QString resolve_stored_image_path(const QString &image_path, const QString &label_dir);
     static QListWidgetItem *make_image_list_item(const QString &image_path, const QString &output_dir);
     static ShapeDict shape_to_dict(const TlShape &shape);
+    static QString make_image_too_large_message(const QByteArray &image_data);
+    static QStringList list_supported_image_extensions();
     static QStringList scan_image_files(const QString &root_dir);
 
     QListWidgetItem *current_item() const;
     TlShape canvas_shape(const TlShape &shape) const;
+    void set_save_image_with_data(bool enabled);
+    static std::vector<int32_t> rgb_from_colormap_id(int32_t label_id);
+    static std::vector<int32_t> rgb_from_label_colors(const QString &label, const QMap<QString, QList<int32_t>> &label_colors);
 
 
 private slots:

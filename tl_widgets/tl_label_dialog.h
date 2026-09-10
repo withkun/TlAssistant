@@ -9,12 +9,14 @@
 #include <QDialogButtonBox>
 #include <QVBoxLayout>
 #include <QTextEdit>
+#include <QCheckBox>
+#include <QScrollArea>
 
 
 class LabelLineEdit : public QLineEdit {
     Q_OBJECT
 public:
-    void setListWidget(QListWidget *list_widget);
+    void set_list_widget(QListWidget *list_widget);
 
 protected:
     void keyPressEvent(QKeyEvent *) override;
@@ -32,31 +34,44 @@ public:
                 bool show_text_field=true,
                 const QString &completion="startswith",
                 const QMap<QString, bool> &fit_to_content={},
-                const QMap<QString, bool> &flags={});
+                const QMap<QString, QList<QString>> &flags={},
+                const QList<QString> &label_history={});
 
     QMap<QString, bool>                 fit_to_content_;
-    QMap<QString, bool>                 flags_;
+    QMap<QString, QList<QString>>       flags_;
     bool                                sort_labels_;
-    QDialogButtonBox                   *buttonBox_{nullptr};
+    QMap<QString, QList<QString>>       flags_spec_;
+    QList<QString>                      label_history_;
+    bool                                flags_disabled_{false};
+    QMap<QString, QCheckBox *>          flag_checkboxes_;
+    QMap<QString, bool>                 flag_states_;
+
     LabelLineEdit                      *edit_{nullptr};
     QTextEdit                          *edit_description_{nullptr};
     QLineEdit                          *edit_group_id_{nullptr};
-    QVBoxLayout                        *flagsLayout_{nullptr};
     QListWidget                        *label_list_{nullptr};
 
-    void validate();
-    QString get_stripped_text();
-    void labelSelected(QListWidgetItem *current, QListWidgetItem *previous);
-    void labelDoubleClicked(QListWidgetItem *item);
-    void updateFlags(QString label_new);
-    void postProcess();
+    QWidget                            *flags_container_{};
+    QVBoxLayout                        *flags_layout_{};
+    QScrollArea                        *flags_scroll_{};
+
+    void update_flags(const QString &text);
     void add_label_history(const QString &label);
-    void deleteFlags();
-    void resetFlags(QString label="");
-    void setFlags(QMap<QString, bool> &flags);
-    QMap<QString, bool> getFlags();
-    int32_t getGroupId();
+    QList<QString> label_history() const;
+    QCompleter *make_completer(const QString &completion);
+    void strip_edit_text();
+    void on_label_selected(QListWidgetItem *current, QListWidgetItem *previous);
+    void on_item_double_clicked(QListWidgetItem *item);
+    void on_ok_clicked();
+    void clear_flag_checkboxes();
+    void set_flag_checkboxes(QMap<QString, bool> &flags);
+    QMap<QString, bool> collect_flags();
+    void fit_label_list_to_content();
+    void move_within_screen(const QPoint &target);
+    void clamp_within_screen(const QPoint &target);
+
+    void set_predefined_labels(const QList<QString> &labels);
     std::tuple<QString, QMap<QString, bool>, int32_t, QString>
-    popup(QString text, QPoint position=QPoint(), QMap<QString, bool> flags={}, int32_t group_id=None, QString description="", bool flags_disabled=false, bool move=true);
+    popup(QString text, bool move=true, QPoint position=QPoint(), QMap<QString, bool> flags={}, int32_t group_id=None, QString description="", bool flags_disabled=false);
 };
 #endif //__INC_LABEL_DIALOG_H

@@ -1,7 +1,6 @@
 #ifndef __INC_AI_ASSIST_ANNOTATION_H
 #define __INC_AI_ASSIST_ANNOTATION_H
 
-#include <QWidget>
 #include <QComboBox>
 
 
@@ -12,11 +11,15 @@ public:
                                 const std::function<void(const std::string &n)> &on_model_changed,
                                 const std::function<void(const std::string &n)> &on_output_format_changed,
                                 QWidget *parent = nullptr);
-    ~AiAssistAnnotation() override;
+    ~AiAssistAnnotation() override = default;
 
-    QString output_format();
+    QString current_model_id() const;
+    bool is_point_prompt_mode() const;
+    QString output_format() const;
 
-    void set_disabled_models(const QList<QString> &disabled_models);
+    void set_current_model(const QString &model_display);
+    void set_point_prompt_mode(bool enabled);
+
     void setEnabled(bool a0);
     bool eventFilter(QObject *watched, QEvent *event) override;
 
@@ -31,5 +34,6 @@ private:
     QWidget                *body_{nullptr};
     QComboBox              *model_combo_{nullptr};
     QComboBox              *output_format_combo_{nullptr};
+    bool                    is_point_prompt_mode_{false};
 };
 #endif //__INC_AI_ASSIST_ANNOTATION_H

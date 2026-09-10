@@ -18,6 +18,8 @@ public:
                                          const QList<QPointF> &points, const QList<int32_t> &point_labels,
                                          const QList<TlShape> &existing_shapes);
 
+    void clear();
+
     std::string                         model_name_;
     std::string                         output_format_;
 

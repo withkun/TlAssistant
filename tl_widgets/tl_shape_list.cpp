@@ -7,13 +7,9 @@
 #include <QAbstractTextDocumentLayout>
 
 
-QString format_label_with_color_dot(const QString &text, const std::vector<int32_t> &color) {
-    const int32_t r = color[0], g = color[1], b = color[2];
-    return QString("%1 <font color=\"#%2%3%4\">●</font>").arg(text.toHtmlEscaped())
-               .arg(r, 2, 16, '0').arg(g, 2, 16, '0').arg(b, 2, 16, '0');
-}
+const int32_t LABEL_COLOR_ROLE = Qt::ItemDataRole::UserRole + 1;
 
-QString format_shape_label(const TlShape &shape, const std::vector<int32_t> &fill_rgb) {
+QString format_shape_label(const TlShape &shape) {
     //assert shape.label is not None
     QString text = shape.label_;
     if (shape.group_id_ != None)
@@ -21,86 +17,77 @@ QString format_shape_label(const TlShape &shape, const std::vector<int32_t> &fil
     //enabled_flags = [key for key, value in (shape.flags or {}).items() if value];
     //if enabled_flags:
     //    text += f" [{', '.join(enabled_flags)}]";
-    return format_label_with_color_dot(text, fill_rgb);
+    return text;
 }
 
-HTMLDelegate::HTMLDelegate(QObject *parent) : QStyledItemDelegate(parent) {
-    doc_ = new QTextDocument(this);
+
+const char *TrailingColorDotDelegate::DOT_ = " ●";
+
+QSize TrailingColorDotDelegate::sizeHint(
+    const QStyleOptionViewItem &option,
+    const QModelIndex &index
+) const {
+    auto size = QStyledItemDelegate::sizeHint(option, index);
+    if (index.data(LABEL_COLOR_ROLE).canConvert<QColor>()) {
+        size.setWidth(
+            size.width() + option.fontMetrics.horizontalAdvance(DOT_)
+        );
+    }
+    return size;
 }
 
-void HTMLDelegate::paint(
+void TrailingColorDotDelegate::paint(
     QPainter *painter,
     const QStyleOptionViewItem &option,
     const QModelIndex &index
 ) const {
+    const auto color = index.data(LABEL_COLOR_ROLE);
+    if (!color.canConvert<QColor>()) {
+        QStyledItemDelegate::paint(painter, option, index);
+        return;
+    }
+
     auto *opt = new QStyleOptionViewItem(option);
     this->initStyleOption(opt, index);
-
-    auto html = opt->text;
-    opt->text = "";
-
     const auto *widget_style = (
         opt->widget ? opt->widget->style() : QApplication::style()
     );
-    widget_style->drawControl(QStyle::ControlElement::CE_ItemViewItem, opt, painter);
-
-    QColor text_color;
-    QTextDocument doc;
-    if (opt->state & QStyle::StateFlag::State_Selected) {
-        text_color = opt->palette.color(
-            QPalette::ColorGroup::Active, QPalette::ColorRole::HighlightedText
-        );
-    } else {
-        text_color = opt->palette.color(
-            QPalette::ColorGroup::Active, QPalette::ColorRole::Text
-        );
-    }
-    doc.setDefaultStyleSheet(QString("body { color: %1; }").arg(text_color.name()));
-    doc.setHtml(QString("<body>%1</body>").arg(html));
-
     auto text_rect = widget_style->subElementRect(
         QStyle::SubElement::SE_ItemViewItemText, opt
     );
-    if (index.column() != 0) {
-        text_rect.adjust(5, 0, 0, 0);
-    }
-    // opt.text was emptied above, so some styles (e.g. Adwaita) return a
-    // text sub-rect too narrow for the rendered HTML and clip the label.
-    // Widen it to the document's ideal width so the text stays visible.
-    text_rect.setWidth(std::max(text_rect.width(), (int32_t)std::ceil(doc_->idealWidth())));
+    const auto text_margin = (
+        widget_style->pixelMetric(
+            QStyle::PixelMetric::PM_FocusFrameHMargin, nullptr, opt->widget
+        )
+        + 1
+    );
+    const auto dot_width = opt->fontMetrics.horizontalAdvance(DOT_);
+    const auto available_width = std::max(0, text_rect.width() - 2 * text_margin - dot_width);
 
-    constexpr int32_t VERT_FUDGE = 4;
-    int32_t margin = (option.rect.height() - opt->fontMetrics.height()) / 2 - VERT_FUDGE;
-    text_rect.setTop(text_rect.top() + margin);
+    // The dot is painted here rather than appended to opt.text, so that Qt
+    // never draws the glyph in the text color underneath it: the two draws
+    // land a subpixel apart and the one below shows as a fringe.
+    opt->text = opt->fontMetrics.elidedText(
+        opt->text, opt->textElideMode, available_width
+    );
+    widget_style->drawControl(
+        QStyle::ControlElement::CE_ItemViewItem, opt, painter, opt->widget
+    );
+
+    auto dot_rect = QRect(text_rect);
+    dot_rect.setLeft(
+        text_rect.left() + text_margin + opt->fontMetrics.horizontalAdvance(opt->text)
+    );
+    dot_rect.setWidth(dot_width);
 
     painter->save();
-    painter->translate(text_rect.topLeft());
-    painter->setClipRect(text_rect.translated(-text_rect.topLeft()));
-    doc.drawContents(painter);
+    painter->setFont(opt->font);
+    painter->setPen(color.value<QColor>());
+    painter->drawText(dot_rect, opt->displayAlignment, DOT_);
     painter->restore();
 }
 
-QSize HTMLDelegate::sizeHint(
-    const QStyleOptionViewItem &option,
-    const QModelIndex &index
-) const {
-    constexpr int32_t VERT_FUDGE = 4;
-    auto *opt = new QStyleOptionViewItem(option);
-    this->initStyleOption(opt, index);
-    QTextDocument doc;
-    doc.setHtml(opt->text);
-    const auto height = int32_t(doc.size().height()) - VERT_FUDGE;
-    return {int32_t(doc.idealWidth()), height};
-}
-
-QSize HTMLDelegate::default_size_hint() {
-    constexpr int32_t VERT_FUDGE = 4;
-    QTextDocument doc;
-    const auto height = int32_t(doc.size().height()) - VERT_FUDGE;
-    return {int32_t(doc.idealWidth()), height};
-}
-
-ShapeListItem::ShapeListItem(const QString &text, const TlShape &shape) : QStandardItem() {
+LabelListItem::LabelListItem(const QString &text, const TlShape &shape) : QStandardItem() {
     this->setText(text);
     this->set_shape(shape);
 
@@ -111,19 +98,25 @@ ShapeListItem::ShapeListItem(const QString &text, const TlShape &shape) : QStand
         : Qt::CheckState::Unchecked
     );
     this->setEditable(false);
-    this->setTextAlignment(Qt::AlignmentFlag::AlignBottom);
 }
 
-ShapeListItem *ShapeListItem::clone() const {
-    return new ShapeListItem(this->text(), this->shape());
+LabelListItem *LabelListItem::clone() const {
+    auto item = new LabelListItem(this->text(), this->shape());
+    item->setData(this->data(LABEL_COLOR_ROLE), LABEL_COLOR_ROLE);
+    return item;
 }
 
-void ShapeListItem::set_shape(const TlShape &shape) {
+void LabelListItem::set_shape(const TlShape &shape) {
     this->setData(QVariant(), Qt::UserRole);    // clear first: check equal in setData.
     this->setData(QVariant::fromValue(shape), Qt::ItemDataRole::UserRole);
 }
 
-TlShape ShapeListItem::shape() const {
+void LabelListItem::set_label(const QString &text, const std::tuple<int, int, int> &color) {
+    this->setText(text);
+    this->setData(QColor(std::get<0>(color), std::get<1>(color), std::get<2>(color)), LABEL_COLOR_ROLE);
+}
+
+TlShape LabelListItem::shape() const {
     return this->data(Qt::ItemDataRole::UserRole).value<TlShape>();
 }
 
@@ -134,7 +127,7 @@ TlShape ShapeListItem::shape() const {
 //    return '{}("{}")'.format(self.__class__.__name__, self.text())
 
 
-bool ShapeItemModel::removeRows(
+bool ListItemModel::removeRows(
     const int row,
     const int count,
     const QModelIndex &parent
@@ -144,7 +137,7 @@ bool ShapeItemModel::removeRows(
     return ret;
 }
 
-bool ShapeItemModel::dropMimeData(
+bool ListItemModel::dropMimeData(
     const QMimeData *data,
     const Qt::DropAction action,
     int row,
@@ -168,29 +161,29 @@ bool ShapeItemModel::dropMimeData(
     return QStandardItemModel::dropMimeData(data, action, row, column, _parent);
 }
 
-ShapeListView::ShapeListView(QWidget *parent) : QListView(parent) {
+LabelListWidget::LabelListWidget(QWidget *parent) : QListView(parent) {
     this->setWindowFlags(Qt::WindowType::Window);
 
-    this->model_ = new ShapeItemModel();
-    this->model_->setItemPrototype(new ShapeListItem(""));
-    this->setModel(this->model_);
+    this->model_ = new ListItemModel();
+    this->model_->setItemPrototype(new LabelListItem());
+    this->QListView::setModel(this->model_);
 
-    this->setItemDelegate(new HTMLDelegate(this));
+    this->setItemDelegate(new TrailingColorDotDelegate(this));
     this->setSelectionMode(
         QAbstractItemView::SelectionMode::ExtendedSelection     // 选中模式
     );
     this->setDragDropMode(QAbstractItemView::DragDropMode::InternalMove);
     this->setDefaultDropAction(Qt::DropAction::MoveAction);
 
-    QObject::connect(this, &ShapeListView::doubleClicked, this, &ShapeListView::on_item_double_clicked);
-    QObject::connect(this->selectionModel(), &QItemSelectionModel::selectionChanged, this, &ShapeListView::on_item_selection_changed);
-    QObject::connect(this->model_, &ShapeItemModel::item_dropped, this, &ShapeListView::on_item_dropped);
-    QObject::connect(this->model_, &ShapeItemModel::itemChanged, this, &ShapeListView::on_item_changed);
+    QObject::connect(this, &LabelListWidget::doubleClicked, this, &LabelListWidget::on_item_double_clicked);
+    QObject::connect(this->selectionModel(), &QItemSelectionModel::selectionChanged, this, &LabelListWidget::on_item_selection_changed);
+    QObject::connect(this->model_, &ListItemModel::item_dropped, this, &LabelListWidget::on_item_dropped);
+    QObject::connect(this->model_, &ListItemModel::itemChanged, this, &LabelListWidget::on_item_changed);
 
     this->press_snapshot_ = {};
 }
 
-void ShapeListView::mousePressEvent(QMouseEvent *e) {
+void LabelListWidget::mousePressEvent(QMouseEvent *e) {
     this->press_snapshot_ = this->selected_items() | std::views::transform([this](auto &item) {
         return ItemSnapshot{
             .index=QPersistentModelIndex(this->model_->indexFromItem(item)),
@@ -201,13 +194,13 @@ void ShapeListView::mousePressEvent(QMouseEvent *e) {
     QListView::mousePressEvent(e);
 }
 
-void ShapeListView::mouseReleaseEvent(QMouseEvent *e) {
+void LabelListWidget::mouseReleaseEvent(QMouseEvent *e) {
     QListView::mouseReleaseEvent(e);
 
     // Restore the multi-selection only when a checkbox toggle collapsed it.
     // A plain row click should narrow the selection to one row.
     bool check_state_changed = false;
-    QList<ShapeListItem *> items_at_press = {};
+    QList<LabelListItem *> items_at_press = {};
     for (const auto &snap : this->press_snapshot_) {
         auto *item = this->resolve_item(snap.index);
         if (item == nullptr)
@@ -231,29 +224,23 @@ void ShapeListView::mouseReleaseEvent(QMouseEvent *e) {
     this->press_snapshot_ = {};
 }
 
-QList<ShapeListItem *> ShapeListView::selection_at_press() {
+QList<LabelListItem *> LabelListWidget::selection_at_press() {
     return this->press_snapshot_
         | std::views::transform([this](const auto &snap) { return this->resolve_item(snap.index); })
         | std::views::filter([](const auto &item) { return item != nullptr; })
-        | std::ranges::to<QList<ShapeListItem *>>();
+        | std::ranges::to<QList<LabelListItem *>>();
 }
 
-ShapeListItem *ShapeListView::resolve_item(
+LabelListItem *LabelListWidget::resolve_item(
     const QPersistentModelIndex &index
 ) {
     if (!index.isValid())
         return nullptr;
-    return dynamic_cast<ShapeListItem *>(this->model_->itemFromIndex(index));
+    return dynamic_cast<LabelListItem *>(this->model_->itemFromIndex(index));
 }
 
-int32_t ShapeListView::len() const {
+int32_t LabelListWidget::len() const {
     return this->model_->rowCount();
-}
-
-QList<ShapeListItem *> ShapeListView::items() const {
-    return std::views::iota(0, this->model_->rowCount())
-        | std::views::transform([this](const auto &i) { return dynamic_cast<ShapeListItem *>(this->model_->item(i)); })
-        | std::ranges::to<QList<ShapeListItem *>>();
 }
 
 //def __getitem__(self, i: int) -> LabelListWidgetItem:
@@ -262,69 +249,80 @@ QList<ShapeListItem *> ShapeListView::items() const {
 //def __iter__(self) -> Iterator[LabelListWidgetItem]:
 //    for i in range(len(self)):
 //        yield self[i]
+//
+//@property
+//def item_dropped(self) -> QtCore.SignalInstance:
+//    return self._model.item_dropped
+//
+//@property
+//def item_changed(self) -> QtCore.SignalInstance:
+//    return self._model.itemChanged
 
-void ShapeListView::on_item_dropped() {
+QList<LabelListItem *> LabelListWidget::items() const {
+    return std::views::iota(0, this->model_->rowCount())
+        | std::views::transform([this](const auto &i) { return dynamic_cast<LabelListItem *>(this->model_->item(i)); })
+        | std::ranges::to<QList<LabelListItem *>>();
+}
+
+void LabelListWidget::on_item_dropped() {
     emit this->item_dropped();
 }
 
-void ShapeListView::on_item_changed(QStandardItem *item) {
-    emit this->item_changed(dynamic_cast<ShapeListItem *>(item));
+void LabelListWidget::on_item_changed(QStandardItem *item) {
+    emit this->item_changed(dynamic_cast<LabelListItem *>(item));
 }
 
-void ShapeListView::on_item_selection_changed(
+void LabelListWidget::on_item_selection_changed(
     const QItemSelection &selected,
     const QItemSelection &deselected
 ) {
-    QList<ShapeListItem *> selected_items = selected.indexes() | std::views::transform([this](const auto &i){ return static_cast<ShapeListItem *>(this->model_->itemFromIndex(i)); }) | std::ranges::to<QList<ShapeListItem *>>();
-    QList<ShapeListItem *> deselected_items = deselected.indexes() | std::views::transform([this](const auto &i){ return static_cast<ShapeListItem *>(this->model_->itemFromIndex(i)); }) | std::ranges::to<QList<ShapeListItem *>>();
+    QList<LabelListItem *> selected_items = selected.indexes() | std::views::transform([this](const auto &i){ return static_cast<LabelListItem *>(this->model_->itemFromIndex(i)); }) | std::ranges::to<QList<LabelListItem *>>();
+    QList<LabelListItem *> deselected_items = deselected.indexes() | std::views::transform([this](const auto &i){ return static_cast<LabelListItem *>(this->model_->itemFromIndex(i)); }) | std::ranges::to<QList<LabelListItem *>>();
     emit this->item_selection_changed(selected_items, deselected_items);
 }
 
-void ShapeListView::on_item_double_clicked(const QModelIndex &index) {
-    emit this->item_double_clicked(dynamic_cast<ShapeListItem *>(this->model_->itemFromIndex(index)));
+void LabelListWidget::on_item_double_clicked(const QModelIndex &index) {
+    emit this->item_double_clicked(dynamic_cast<LabelListItem *>(this->model_->itemFromIndex(index)));
 }
 
-QList<ShapeListItem *> ShapeListView::selected_items() {
-    //return [self.model().itemFromIndex(i) for i in self.selectedIndexes()]
+QList<LabelListItem *> LabelListWidget::selected_items() {
     return this->selectedIndexes()
-        | std::views::transform([this](const auto &idx) { return static_cast<ShapeListItem *>(this->model_->itemFromIndex(idx)); })
-        | std::ranges::to<QList<ShapeListItem *>>();
+        | std::views::transform([this](const auto &idx) { return static_cast<LabelListItem *>(this->model_->itemFromIndex(idx)); })
+        | std::ranges::to<QList<LabelListItem *>>();
 }
 
-void ShapeListView::scroll_to_item(ShapeListItem *item) {
+void LabelListWidget::scroll_to_item(LabelListItem *item) {
     this->scrollTo(this->model_->indexFromItem(item));
 }
 
-void ShapeListView::add_item(ShapeListItem *item) {
+void LabelListWidget::add_item(LabelListItem *item) {
     if (item == nullptr)
         throw std::invalid_argument("item must be LabelListWidgetItem");
     this->model_->setItem(this->model_->rowCount(), 0, item);
-    auto *delegate = dynamic_cast<HTMLDelegate *>(this->itemDelegate());
-    item->setSizeHint(delegate->default_size_hint());
 }
 
-void ShapeListView::removeItem(ShapeListItem *item) {
+void LabelListWidget::remove_item(LabelListItem *item) {
     const auto index = this->model_->indexFromItem(item);
     this->model_->removeRows(index.row(), 1, QModelIndex());
 }
 
-void ShapeListView::select_item(ShapeListItem *item) {
+void LabelListWidget::select_item(LabelListItem *item) {
     const auto index = this->model_->indexFromItem(item);
     selectionModel()->select(
         index, QItemSelectionModel::SelectionFlag::Select
     );
 }
 
-ShapeListItem *ShapeListView::find_item_by_shape(const TlShape &shape) {
+LabelListItem *LabelListWidget::find_item_by_shape(const TlShape &shape) {
     for (auto row = 0; row < this->model_->rowCount(); ++row) {
         auto *s_it = this->model_->item(row, 0);
-        auto *item = dynamic_cast<ShapeListItem *>(s_it);
+        auto *item = dynamic_cast<LabelListItem *>(s_it);
         if (item->shape() == shape)
             return item;
     }
     throw std::runtime_error("cannot find shape: {shape}"); //.format(shape));
 }
 
-void ShapeListView::clear() {
+void LabelListWidget::clear() {
     this->model_->clear();
 }

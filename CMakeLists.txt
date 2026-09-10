@@ -25,7 +25,7 @@ set(CMAKE_CUDA_ARCHITECTURES 86)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 set(CMAKE_CUDA_STANDARD 20)
 
-set(ONNX_RUNTIME_ROOT d:/3rd_party/ONNXRuntime-win-x64-gpu-1.27.1)
+set(ONNX_RUNTIME_ROOT d:/3rd_party/ONNXRuntime-win-x64-gpu-1.28.2)
 
 set(OpenCV_DIR d:/3rd_party/opencv_5.0.0)
 include(${OpenCV_DIR}/OpenCVConfig.cmake)
@@ -70,12 +70,22 @@ set(TL_COMMONS
 set(TL_SOURCES
     config/app_config.h
     config/app_config.cpp
+    config/schema.h
+    config/schema.cpp
+    config/shape_color.h
+    config/shape_color.cpp
     config/tl_yaml_config.h
     config/tl_yaml_config.cpp
+    config/tl_yaml_loader.h
+    config/tl_yaml_loader.cpp
+
+    tl_widgets/settings_dialog.h
+    tl_widgets/settings_dialog.cpp
     tl_widgets/canvas_interaction.h
     tl_widgets/canvas_interaction.cpp
     tl_widgets/shape_clipboard.h
     tl_widgets/shape_clipboard.cpp
+    tl_widgets/shape_color.cpp
     tl_widgets/shape_render.h
     tl_widgets/shape_render.cpp
     tl_widgets/zoom_widget.h
@@ -84,6 +94,8 @@ set(TL_SOURCES
     tl_widgets/shape_to_json.cpp
     tl_widgets/status_stats.h
     tl_widgets/status_stats.cpp
+    tl_widgets/label_flags.h
+    tl_widgets/label_flags.cpp
     tl_widgets/tl_canvas.h
     tl_widgets/tl_canvas.cpp
     tl_widgets/tl_download.h
@@ -141,6 +153,8 @@ set(AI_SOURCES
     tl_modules/sam_apis.cpp
     tl_modules/sam_session.h
     tl_modules/sam_session.cpp
+    tl_modules/ai_models.h
+    tl_modules/ai_models.cpp
 
     tl_assists/ai_assist_session.h
     tl_assists/ai_assist_session.cpp
@@ -195,6 +209,7 @@ qt_add_translations(${PROJECT_NAME} TS_FILES
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/common
+    ${CMAKE_CURRENT_SOURCE_DIR}/config
     ${CMAKE_CURRENT_SOURCE_DIR}/tl_assists
     ${CMAKE_CURRENT_SOURCE_DIR}/tl_modules
     ${CMAKE_CURRENT_SOURCE_DIR}/tl_widgets

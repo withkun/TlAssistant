@@ -3,6 +3,7 @@
 #include "info_button.h"
 #include "spdlog/spdlog.h"
 #include "common/format_qt.h"
+#include "tl_modules/ai_models.h"
 
 #include <QLabel>
 #include <QEvent>
@@ -11,25 +12,12 @@
 #include <QStandardItemModel>
 
 
-namespace {
-const std::vector<std::pair<QString, QString>> available_models_{
-    {"efficientsam:10m", "EfficientSam (speed)"},
-    {"efficientsam:latest", "EfficientSam (accuracy)"},
-    {"sam:100m", "Sam (speed)"},
-    {"sam:300m", "Sam (balanced)"},
-    {"sam:latest", "Sam (accuracy)"},
-    {"sam2:small", "Sam2 (speed)"},
-    {"sam2:latest", "Sam2 (balanced)"},
-    {"sam2:large", "Sam2 (accuracy)"},
-    {"sam3:latest", "Sam3"},
-};
-}
-
 AiAssistAnnotation::AiAssistAnnotation(
     const QString &default_model,
     const std::function<void(const std::string &n)> &on_model_changed,
     const std::function<void(const std::string &n)> &on_output_format_changed,
     QWidget *parent) : QWidget(parent) {
+    this->is_point_prompt_mode_ = false;
     this->init_ui(
         default_model,
         on_model_changed,
@@ -37,18 +25,26 @@ AiAssistAnnotation::AiAssistAnnotation(
     );
 }
 
-AiAssistAnnotation::~AiAssistAnnotation() = default;
+//@property
+QString AiAssistAnnotation::current_model_id() const {
+    return this->model_combo_->currentData().toString();
+}
 
 //@property
-QString AiAssistAnnotation::output_format() {
+bool AiAssistAnnotation::is_point_prompt_mode() const {
+    return this->is_point_prompt_mode_;
+}
+
+//@property
+QString AiAssistAnnotation::output_format() const {
     return this->output_format_combo_->currentData().toString();
 }
 
 void AiAssistAnnotation::init_ui(
     const QString &default_model,
     const std::function<void(const std::string &n)> &on_model_changed,
-    const std::function<void(const std::string &n)> &on_output_format_changed)
-{
+    const std::function<void(const std::string &n)> &on_output_format_changed
+) {
     auto *const layout = new QVBoxLayout();
     layout->setContentsMargins(4, 4, 4, 4);
     layout->setSpacing(2);
@@ -74,7 +70,7 @@ void AiAssistAnnotation::init_ui(
     body_->setLayout(body_layout);
 
     this->model_combo_ = new QComboBox();
-    for (auto &[model_id, model_display] : available_models_) {
+    for (auto &[model_id, model_display, prompts] : ai_models::AI_ASSIST_MODEL_OPTIONS) {
         this->model_combo_->addItem(model_display, model_id);
     }
     body_layout->addWidget(this->model_combo_);
@@ -89,40 +85,41 @@ void AiAssistAnnotation::init_ui(
 
     layout->addWidget(body_);
 
-    int32_t model_index;
-    const auto model_ui_names = available_models_ | std::views::transform([](auto &p) { return p.first; }) | std::ranges::to<QList<QString>>();
-    if (model_ui_names.contains(default_model)) {
-        model_index = model_ui_names.indexOf(default_model);
-    } else {
+    int32_t model_index = this->model_combo_->findText(default_model);
+    if (model_index < 0) {
         SPDLOG_WARN("Default AI model is not found: {}", default_model);
         model_index = 0;
     }
 
-    QObject::connect(this->model_combo_, &QComboBox::currentIndexChanged, [this, on_model_changed](int index) {
-        const QString model_name = this->model_combo_->itemData(index).toString();
-        on_model_changed(model_name.toStdString());
-    });
     this->model_combo_->setCurrentIndex(model_index);
-
-    QObject::connect(this->output_format_combo_, &QComboBox::currentIndexChanged, [this, on_output_format_changed](int index) {
-        const QString model_name = this->output_format_combo_->itemData(index).toString();
-        on_output_format_changed(model_name.toStdString());
+    QObject::connect(this->model_combo_, &QComboBox::currentIndexChanged, [this, on_model_changed](int index) {
+        on_model_changed(this->model_combo_->itemData(index).value<std::string>());
     });
+
     this->output_format_combo_->setCurrentIndex(0);
+    QObject::connect(this->output_format_combo_, &QComboBox::currentIndexChanged, [this, on_output_format_changed](int index) {
+        on_output_format_changed(
+            this->output_format_combo_->itemData(index).value<std::string>()
+        );
+    });
 
     this->setMaximumWidth(200);
 }
 
-void AiAssistAnnotation::set_disabled_models(const QList<QString> &disabled_models) {
-    QStandardItemModel *model = static_cast<QStandardItemModel *>(this->model_combo_->model());
-    for (int32_t i = 0; i < this->model_combo_->count(); ++i) {
-        auto model_id = this->model_combo_->itemData(i);
-        auto item = model->item(i);
+void AiAssistAnnotation::set_current_model(const QString &model_display) {
+    auto index = this->model_combo_->findText(model_display);
+    if (index < 0 || this->model_combo_->currentIndex() == index)
+        return;
+    this->model_combo_->setCurrentIndex(index);
+}
+
+void AiAssistAnnotation::set_point_prompt_mode(bool enabled) {
+    this->is_point_prompt_mode_ = enabled;
+    auto model = qobject_cast<QStandardItemModel *>(this->model_combo_->model());
+    for (const auto [index, option] : ai_models::AI_ASSIST_MODEL_OPTIONS | std::views::enumerate) {
+        auto item = model->item(index);
         //assert item is not None
-        if (disabled_models.contains(model_id)) {
-            item->setFlags(item->flags() & ~Qt::ItemFlag::ItemIsEnabled);
-        } else
-            item->setFlags(item->flags() | Qt::ItemFlag::ItemIsEnabled);
+        item->setEnabled(!enabled || option.supports_point_prompts);
     }
 }
 

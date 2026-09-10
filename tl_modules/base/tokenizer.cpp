@@ -271,7 +271,7 @@ SimpleTokenizer::SimpleTokenizer(const std::string &bpe_file) {
 
     // 初始化字节编码器
     byte_encoder_ = bytes_to_unicode();
-    for (const auto [fst, snd] : byte_encoder_) {
+    for (const auto &[fst, snd] : byte_encoder_) {
         byte_decoder_[snd] = fst;
     }
 
@@ -298,8 +298,8 @@ SimpleTokenizer::SimpleTokenizer(const std::string &bpe_file) {
             bpe_ranks_[{a, b}] = bpe_ranks_.size();
         }
     }
-    vocab.push_back("<|startoftext|>");
-    vocab.push_back("<|endoftext|>");
+    vocab.emplace_back("<|startoftext|>");
+    vocab.emplace_back("<|endoftext|>");
 
     // 创建编码器/解码器
     for (size_t i = 0; i < vocab.size(); ++i) {
@@ -323,7 +323,7 @@ SimpleTokenizer::SimpleTokenizer(const std::string &bpe_file) {
 std::vector<SPair> get_pairs(const std::vector<std::string>& word) {
     std::vector<SPair> pairs;
     for (int i = 0; i < word.size() - 1; ++i) {
-        pairs.push_back({word[i], word[i+1]});
+        pairs.emplace_back(word[i], word[i+1]);
     }
     return pairs;
 }
@@ -351,7 +351,7 @@ std::string SimpleTokenizer::bpe(const std::string &token) {
         const auto Pred = [this](const SPair &a, const SPair &b) { return bpe_ranks_[a] < bpe_ranks_[b]; };
         const auto bigram_it = std::ranges::min_element(pairs, Pred);
         if (bigram_it == pairs.end()) { break; }
-        const auto bigram = *bigram_it;
+        const auto &bigram = *bigram_it;
         if (!bpe_ranks_.contains(bigram)) { break; }
 
         const auto first = bigram.first;
@@ -430,8 +430,8 @@ std::vector<int64_t> SimpleTokenizer::encode(const std::string &text) {
             }
         }
 
-        for (const auto& st : sub_tokens) {
-            if (encoder_.find(st) != encoder_.end()) {
+        for (const auto &st : sub_tokens) {
+            if (encoder_.contains(st)) {
                 bpe_tokens.push_back(encoder_[st]);
             } else {
                 bpe_tokens.push_back(-1);

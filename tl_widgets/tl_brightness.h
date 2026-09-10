@@ -3,6 +3,7 @@
 
 #include <QDialog>
 #include <QSlider>
+#include <QGridLayout>
 
 
 class BrightnessContrast : public QDialog {
@@ -10,7 +11,9 @@ public:
     explicit BrightnessContrast(const QImage &img, const std::function<void(const QImage &img)> &callback, QWidget *parent = nullptr);
     ~BrightnessContrast() override = default;
 
-    void onNewValue(int32_t value);
+    QSlider    *add_slider_row(QGridLayout *grid, int32_t row, const QString &title);
+    QString     format_factor(int32_t value);
+    void        apply();
 
     QSlider                                *slider_contrast_{nullptr};
     QSlider                                *slider_brightness_{nullptr};

@@ -28,7 +28,7 @@ BrightnessContrast::BrightnessContrast(const QImage &img, const std::function<vo
         value_label->setAlignment(Qt::AlignRight);
         layout->addWidget(value_label);
 
-        QObject::connect(slider, &QSlider::valueChanged, this, &BrightnessContrast::onNewValue);
+        QObject::connect(slider, &QSlider::valueChanged, this, &BrightnessContrast::apply);
         QObject::connect(slider, &QSlider::valueChanged, [=]() {
             value_label->setText(QString("%1").arg(slider->value() / base_value_, 0, 'f', 2)); }
         );
@@ -56,7 +56,32 @@ BrightnessContrast::BrightnessContrast(const QImage &img, const std::function<vo
     callback_ = callback;
 }
 
-void BrightnessContrast::onNewValue(int32_t value) {
+QSlider *BrightnessContrast::add_slider_row(
+    QGridLayout *grid, int32_t row, const QString &title
+) {
+    auto slider = new QSlider(Qt::Orientation::Horizontal);
+    slider->setRange(0, 3 * this->base_value_);
+    slider->setValue(this->base_value_);
+
+    auto value_label = new QLabel(this->format_factor(slider->value()));
+    value_label->setAlignment(Qt::AlignmentFlag::AlignRight);
+
+    QObject::connect(slider, &QSlider::valueChanged, [=]() { this->apply(); });
+    QObject::connect(slider, &QSlider::valueChanged, [=](auto value) {
+        value_label->setText(this->format_factor(value));
+    });
+
+    grid->addWidget(new QLabel(title), row, 0);
+    grid->addWidget(slider, row, 1);
+    grid->addWidget(value_label, row, 2);
+    return slider;
+}
+
+QString BrightnessContrast::format_factor(int32_t value) {
+    return QString("%1").arg(value / this->base_value_, 0, 'f', 2);
+}
+
+void BrightnessContrast::apply() {
     const double contrast   = slider_contrast_->value() / base_value_;
     const double brightness = slider_brightness_->value() / base_value_;
     const double saturation = slider_saturation_->value() / base_value_;

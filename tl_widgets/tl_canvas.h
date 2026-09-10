@@ -47,7 +47,12 @@ public:
     DraftShape pop_point();
 
 public:
-    void clear();
+    void clear() {
+        this->points_.clear();
+        this->point_labels_.clear();
+        this->shape_type_.clear();
+        this->closed_ = false;
+    }
 
     bool empty() const {
         return this->points_.empty();
@@ -111,6 +116,7 @@ signals:
     void new_shape();
     void inference_produced_no_shapes();
     void inference_failed(const QString &message);
+    void point_prompt_rejected(const QString &model_name);
     void degenerate_shape_rejected();
     void selection_changed(const QList<int32_t> &selected_shapes);   // 选中状态变化
     void shape_moved();
@@ -125,7 +131,7 @@ signals:
 private:
     friend class MainWindow;
     friend class AiAssistSession;
-    using fColorResolver = std::function<std::vector<int32_t>(const QString &)>;
+    using fColorResolver = std::function<std::tuple<int, int, int>(const QString &)>;
     QPixmap                             pixmap_;
     size_t                              pixmap_hash_;
     QString                             create_mode_;
@@ -155,6 +161,8 @@ private:
     QMap<QString, bool>                 crosshair_;
 
     std::unique_ptr<AiAssistSession>    ai_assist_session_;
+    bool                                ai_suppress_existing_shape_matches_;
+    QList<TlShape>                      ai_existing_shape_highlights_;
     bool                                ai_inference_failed_{};
 
     QList<TlShape>                      shapes_;
@@ -203,8 +211,9 @@ private:
     std::string get_ai_model_name();
     void set_ai_model_name(const std::string &model_name);
     void set_ai_output_format(const std::string &output_format);
-    QList<TlShape> shapes_from_ai_points(const QList<QPointF> &points, const QList<int32_t> &point_labels);
-    void report_inference_failure(const QString& error);
+    void set_ai_existing_shape_suppression(bool enabled);
+    void propose_ai_shapes(QString &prompt_kind, QList<QPointF> &points, QList<int32_t> &point_labels);
+    void report_inference_failure(const QString &error);
     void backup_shapes();
     bool can_restore_shape();
     void restore_last_shape();
@@ -239,7 +248,8 @@ private:
     void dispatch_pointer_press(const QPointF &pos, QMouseEvent *event);
     void press_left(const QPointF &pos, QMouseEvent *event);
     void press_left_while_drawing(const QPointF &pos, QMouseEvent *event, bool is_shift_pressed);
-    void extend_current_shape(DraftShape current, QMouseEvent *event);
+    bool reject_incompatible_point_prompt();
+    void extend_current_shape();
     void lock_oriented_rectangle_first_edge(const DraftShape &current);
     void unlock_oriented_rectangle_first_edge(const DraftShape &current);
     void start_new_shape(const QPointF &pos, QMouseEvent *event, bool is_shift_pressed);
@@ -281,6 +291,7 @@ private:
     void draw_active_shape_layer(QPainter &painter);
     void draw_drag_copy_layer(QPainter &painter);
     void draw_preview_overlay_layer(QPainter &painter);
+    void draw_ai_existing_match_layer(QPainter &painter);
     void render_draft(QPainter &painter, const DraftShape &draft, bool highlighted);
     TlShape build_preview_shape();
     TlShape build_polygon_preview(const DraftShape &current);
@@ -293,6 +304,8 @@ private:
     QList<TlShape> build_new_shapes_from_ai_inference();
     void reset_after_shape_creation();
     void cancel_current_shape();
+    void set_ai_existing_shape_highlights(const QList<TlShape> &shapes);
+    void clear_ai_existing_shape_highlights();
     QSize compute_canvas_size() const;
     //def sizeHint(self) -> QtCore.QSize:
     //def minimumSizeHint(self) -> QtCore.QSize:
@@ -319,11 +332,14 @@ private:
     static bool should_reselect_on_right_press(const QList<int32_t> &selected_shapes, int32_t hovered_shape);
     static TlShape pick_pending_moved_shape(bool is_moving_shape, int32_t hovered_index, const QList<TlShape> &shapes);
     static QPointF opposite_corner_in_parallelogram(const QPointF &opposite_to, const QPointF &neighbor1, const QPointF &neighbor2);
+    static QRectF compute_shapes_bounds(QList<TlShape> &shapes);
     static QPair<QPointF, QPointF> project_oriented_rectangle_corners(const QPointF &anchor, const QPointF &edge_axis, const QPointF &moving);
     static bool is_out_of_image(const QPointF &point, const QSize &image_size);
     static QList<QPointF> reproject_oriented_rectangle_corners(const QList<QPointF> &corners, int32_t vertex_index, const QPointF &pos, const QSize &image_size, bool allow_out_of_bounds);
 
 
+    void extend_current_shape(DraftShape current, QMouseEvent *event);
+    QList<TlShape> shapes_from_ai_points(const QList<QPointF> &points, const QList<int32_t> &point_labels);
     void update_shape_info(const TlShape &shape);
 };
 #endif //__INC_CANVAS_H

@@ -17,7 +17,7 @@
     </message>
 </context>
 <context>
-    <name>AiTextToAnnotation</name>
+    <name>AiPromptAnnotation</name>
     <message>
         <source>AI Text-to-Annotation</source>
         <translation>AI提示标注</translation>
@@ -48,10 +48,18 @@
     </message>
 </context>
 <context>
-    <name>BrightnessContrastDialog</name>
+    <name>BrightnessContrast</name>
     <message>
         <source>Brightness/Contrast</source>
         <translation>亮度/对比度</translation>
+    </message>
+    <message>
+        <source>Brightness:</source>
+        <translation>亮度:</translation>
+    </message>
+    <message>
+        <source>Contrast:</source>
+        <translation>对比度:</translation>
     </message>
 </context>
 <context>
@@ -65,8 +73,8 @@
         <translation>按住鼠标拖动以移动形状</translation>
     </message>
     <message>
-        <source>Creating %r</source>
-        <translation>正在创建 %r</translation>
+        <source>Creating %1</source>
+        <translation>正在创建 %1</translation>
     </message>
     <message>
         <source>ESC to cancel</source>
@@ -140,9 +148,29 @@
         <source>Click opposite corner to segment object</source>
         <translation>单击对角以分割对象</translation>
     </message>
+    <message>
+        <source>Click first corner for oriented rectangle</source>
+        <translation>单击确定旋转矩形的第一个角</translation>
+    </message>
+    <message>
+        <source>Click second corner to set orientation</source>
+        <translation>单击第二个角以设定方向</translation>
+    </message>
+    <message>
+        <source>Click third corner to close oriented rectangle</source>
+        <translation>单击第三个角以闭合旋转矩形</translation>
+    </message>
+    <message>
+        <source>Click &amp; drag to rotate the shape</source>
+        <translation>按住鼠标左键拖动以旋转形状</translation>
+    </message>
 </context>
 <context>
     <name>MainWindow</name>
+    <message>
+        <source>tl assistant</source>
+        <translation>瞳乐辅注工具</translation>
+    </message>
     <message>
         <source>Flags</source>
         <translation>标记</translation>
@@ -153,7 +181,7 @@
     </message>
     <message>
         <source>Select label to start annotating for it. Press &apos;Esc&apos; to deselect.</source>
-        <translation>选择标签以开始标注；按 'Esc' 取消选择。</translation>
+        <translation>选择标签以开始标注；按 &apos;Esc&apos; 取消选择。</translation>
     </message>
     <message>
         <source>Label List</source>
@@ -394,14 +422,6 @@ Shapes</source>
         <translation>缩放</translation>
     </message>
     <message>
-        <source>Zoom in or out of the image. Also accessible with %1 %2 and %3 from the canvas.</source>
-        <translation>放大或缩小图像；也可在画布上使用 %1 %2 与 %3。</translation>
-    </message>
-    <message>
-        <source>Ctrl+Wheel</source>
-        <translation>Ctrl+滚轮</translation>
-    </message>
-    <message>
         <source>Zoom &amp;In</source>
         <translation>放大(&amp;I)</translation>
     </message>
@@ -424,14 +444,6 @@ Shapes</source>
     <message>
         <source>Zoom to original size</source>
         <translation>缩放至原始尺寸</translation>
-    </message>
-    <message>
-        <source>&amp;Keep Previous Scale</source>
-        <translation>保留上一次的缩放比例(&amp;K)</translation>
-    </message>
-    <message>
-        <source>Keep previous zoom scale</source>
-        <translation>保留上一次的缩放比例</translation>
     </message>
     <message>
         <source>&amp;Fit Window</source>
@@ -474,6 +486,10 @@ Shapes</source>
         <translation>绘制过程中填充多边形</translation>
     </message>
     <message>
+        <source>Ctrl+Wheel zooms the canvas</source>
+        <translation>Ctrl+滚轮缩放画布</translation>
+    </message>
+    <message>
         <source>&amp;File</source>
         <translation>文件(&amp;F)</translation>
     </message>
@@ -494,12 +510,24 @@ Shapes</source>
         <translation>%1 已启动。</translation>
     </message>
     <message>
+        <source>Mask Output Unavailable</source>
+        <translation>掩膜输出不可用</translation>
+    </message>
+    <message>
+        <source>%1 only detects bounding boxes and cannot create &apos;%2&apos; annotations.
+
+Switch the AI Text-to-Annotation model to &apos;SAM3 (smart)&apos;, or set the output format to &apos;Rectangle&apos;.</source>
+        <translation>%1 仅检测边界框，无法创建 &apos;%2&apos; 标注。
+
+请将 AI Text-to-Annotation 模型切换为 &apos;SAM3 (smart)&apos;，或将输出格式设置为 &apos;Rectangle&apos;。</translation>
+    </message>
+    <message>
         <source>Invalid label</source>
         <translation>标签无效</translation>
     </message>
     <message>
         <source>Invalid label &apos;%1&apos; with validation type &apos;%2&apos;</source>
-        <translation>标签 '%1' 无效（验证类型为 '%2'）</translation>
+        <translation>标签 &apos;%1&apos; 无效（验证类型为 &apos;%2&apos;）</translation>
     </message>
     <message>
         <source>Error saving label data</source>
@@ -508,6 +536,10 @@ Shapes</source>
     <message>
         <source>&lt;b&gt;%1&lt;/b&gt;</source>
         <translation>&lt;b&gt;%1&lt;/b&gt;</translation>
+    </message>
+    <message>
+        <source>AI inference failed: %1</source>
+        <translation>AI 推理失败：%1</translation>
     </message>
     <message>
         <source>Error opening file</source>
@@ -520,14 +552,6 @@ Shapes</source>
     <message>
         <source>Loading %1...</source>
         <translation>正在加载 %1...</translation>
-    </message>
-    <message>
-        <source>Error reading %1</source>
-        <translation>读取 %1 时出错</translation>
-    </message>
-    <message>
-        <source>&lt;p&gt;Make sure &lt;i&gt;%1&lt;/i&gt; is a valid image file.&lt;br/&gt;Supported image formats: %2&lt;/p&gt;</source>
-        <translation>&lt;p&gt;请确认 &lt;i&gt;%1&lt;/i&gt; 是有效的图像文件。&lt;br/&gt;支持的图像格式：%2&lt;/p&gt;</translation>
     </message>
     <message>
         <source>Loaded %1</source>
@@ -562,12 +586,20 @@ Shapes</source>
         <translation>选择文件</translation>
     </message>
     <message>
-        <source>You are about to permanently delete this label file, proceed anyway?</source>
-        <translation>即将永久删除该标签文件，是否继续？</translation>
-    </message>
-    <message>
         <source>Attention</source>
         <translation>注意</translation>
+    </message>
+    <message>
+        <source>Delete</source>
+        <translation>删除</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>取消</translation>
+    </message>
+    <message>
+        <source>Unavailable in AI-Points mode because this model does not support point prompts.</source>
+        <translation>此模型不支持点提示，因此在 AI多边形 模式下不可用。</translation>
     </message>
     <message>
         <source>Save annotations to &quot;%1&quot; before closing?</source>
@@ -578,12 +610,16 @@ Shapes</source>
         <translation>是否保存标注？</translation>
     </message>
     <message>
-        <source>You are about to permanently delete %1 shapes, proceed anyway?</source>
-        <translation>即将永久删除 %1 个形状，是否继续？</translation>
-    </message>
-    <message>
         <source>%1 - Open Directory</source>
         <translation>%1 - 打开目录</translation>
+    </message>
+    <message>
+        <source>The image is too large to open: %1x%2 pixels exceeds the %3 pixel per-side limit of the raster engine. Raising the decode limit will not help. Split the image into tiles (for example with gdal_retile.py) or open a smaller copy.</source>
+        <translation>图像过大,无法打开: %1x%2 像素超出了栅格引擎每边 %3 像素的上限。提高解码上限也无济于事。请将图像切分为图块(例如使用 gdal_retile.py),或打开较小的副本。</translation>
+    </message>
+    <message>
+        <source>The image is too large to open: %1x%2 pixels needs about %3 MB, but the decode limit is %4 MB. Split the image into tiles (for example with gdal_retile.py) or open a smaller copy.</source>
+        <translation>图像过大,无法打开: %1x%2 像素约需 %3 MB,但解码上限为 %4 MB。请将图像切分为图块(例如使用 gdal_retile.py),或打开较小的副本。</translation>
     </message>
     <message>
         <source>Toggle &quot;keep previous annotation&quot; mode</source>
@@ -594,42 +630,12 @@ Shapes</source>
         <translation>保留上一次的亮度/对比度</translation>
     </message>
     <message>
-        <source>Preferences…</source>
-        <translation>偏好设置…</translation>
-    </message>
-    <message>
-        <source>Open config file in text editor</source>
-        <translation>在文本编辑器中打开配置文件</translation>
-    </message>
-    <message>
-        <source>No Config File</source>
-        <translation>未找到配置文件</translation>
-    </message>
-    <message>
-        <source>Configuration was provided as a YAML expression via command line.
-
-To use the preferences editor, start Labelme with a config file:
-  labelme --config ~/.labelmerc</source>
-        <translation>配置是通过命令行以 YAML 表达式的形式传入的。
-
-若要使用偏好设置编辑器，请使用配置文件启动 Labelme：
-  labelme --config ~/.labelmerc</translation>
-    </message>
-    <message>
         <source>Configuration Errors</source>
         <translation>配置错误</translation>
     </message>
     <message>
         <source>Errors were found while loading the configuration. Please review the errors below and reload your configuration or ignore the erroneous lines.</source>
         <translation>加载配置时发现错误。请查看下方的错误信息，并重新加载配置或忽略有误的行。</translation>
-    </message>
-    <message>
-        <source>&lt;p&gt;&lt;b&gt;%1&lt;/b&gt;&lt;/p&gt;&lt;p&gt;Make sure &lt;i&gt;%2&lt;/i&gt; is a valid label file.&lt;/p&gt;</source>
-        <translation>&lt;p&gt;&lt;b&gt;%1&lt;/b&gt;&lt;/p&gt;&lt;p&gt;请确认 &lt;i&gt;%2&lt;/i&gt; 是有效的标签文件。&lt;/p&gt;</translation>
-    </message>
-    <message>
-        <source>&lt;p&gt;&lt;b&gt;%1&lt;/b&gt;&lt;/p&gt;&lt;p&gt;Make sure &lt;i&gt;%2&lt;/i&gt; is a valid image file.&lt;/p&gt;</source>
-        <translation>&lt;p&gt;&lt;b&gt;%1&lt;/b&gt;&lt;/p&gt;&lt;p&gt;请确认 &lt;i&gt;%2&lt;/i&gt; 是有效的图像文件。&lt;/p&gt;</translation>
     </message>
     <message>
         <source>Reset Layout</source>
@@ -683,7 +689,7 @@ To use the preferences editor, start Labelme with a config file:
         <source>%1 does not support point prompts.
 Please select a different model or use AI-Box mode.</source>
         <translation>%1 不支持点提示。
-请另选模型，或改用 'AI蒙板' 模式。</translation>
+请另选模型，或改用 AI蒙板 模式。</translation>
     </message>
     <message>
         <source>File list is disabled when a label file is opened</source>
@@ -698,6 +704,34 @@ Please select a different model or use AI-Box mode.</source>
         <translation>在悬停的多边形边上插入新顶点</translation>
     </message>
     <message>
+        <source>&amp;Keep Previous Zoom</source>
+        <translation>保留上一次的缩放(&amp;K)</translation>
+    </message>
+    <message>
+        <source>Permanently delete this label file? This action cannot be undone.</source>
+        <translation>永久删除该标签文件？此操作无法撤销。</translation>
+    </message>
+    <message>
+        <source>Permanently delete %1 shapes? This action cannot be undone.</source>
+        <translation>永久删除 %1 个形状？此操作无法撤销。</translation>
+    </message>
+    <message>
+        <source>Allowed formats: %1</source>
+        <translation>支持的格式: %1</translation>
+    </message>
+    <message>
+        <source>The selected label file could not be opened: %1</source>
+        <translation>无法打开所选标签文件: %1</translation>
+    </message>
+    <message>
+        <source>The selected image file could not be opened: %1</source>
+        <translation>无法打开所选图像文件: %1</translation>
+    </message>
+    <message>
+        <source>Failed to load: %1</source>
+        <translation>加载失败：%1</translation>
+    </message>
+    <message>
         <source>Oriented Rectangle</source>
         <translation>旋转矩形</translation>
     </message>
@@ -706,8 +740,258 @@ Please select a different model or use AI-Box mode.</source>
         <translation>开始绘制旋转矩形</translation>
     </message>
     <message>
-        <source>tl assistant</source>
-        <translation>瞳乐辅注工具</translation>
+        <source>AI inference produced no new annotation.</source>
+        <translation>AI 推理未生成新标注。</translation>
+    </message>
+    <message>
+        <source>Shape had no area; nothing created.</source>
+        <translation>形状面积为零，未创建。</translation>
+    </message>
+    <message>
+        <source>Settings…</source>
+        <translation>设置…</translation>
+    </message>
+    <message>
+        <source>Edit settings</source>
+        <translation>编辑设置</translation>
+    </message>
+    <message>
+        <source>Settings are managed via --config for this session</source>
+        <translation>本次会话的设置通过 --config 管理</translation>
+    </message>
+    <message>
+        <source>Configuration Error</source>
+        <translation>配置错误</translation>
+    </message>
+</context>
+<context>
+    <name>SettingsDialog</name>
+    <message>
+        <source>Color theme</source>
+        <translation>颜色主题</translation>
+    </message>
+    <message>
+        <source>System</source>
+        <translation>跟随系统</translation>
+    </message>
+    <message>
+        <source>Light</source>
+        <translation>浅色</translation>
+    </message>
+    <message>
+        <source>Dark</source>
+        <translation>深色</translation>
+    </message>
+    <message>
+        <source>Show label popup on new shape</source>
+        <translation>新建形状时显示标签弹窗</translation>
+    </message>
+    <message>
+        <source>Show shape labels on canvas</source>
+        <translation>在画布上显示形状标签</translation>
+    </message>
+    <message>
+        <source>Allow points outside the image boundary</source>
+        <translation>允许点超出图像边界</translation>
+    </message>
+    <message>
+        <source>Appearance and language</source>
+        <translation>外观与语言</translation>
+    </message>
+    <message>
+        <source>Files and saving</source>
+        <translation>文件与保存</translation>
+    </message>
+    <message>
+        <source>Drawing and canvas</source>
+        <translation>绘制与画布</translation>
+    </message>
+    <message>
+        <source>Continue between images</source>
+        <translation>图像之间延续</translation>
+    </message>
+    <message>
+        <source>Label sources</source>
+        <translation>标签来源</translation>
+    </message>
+    <message>
+        <source>Label behavior</source>
+        <translation>标签行为</translation>
+    </message>
+    <message>
+        <source>AI assist</source>
+        <translation>AI 辅助</translation>
+    </message>
+    <message>
+        <source>Save automatically</source>
+        <translation>自动保存</translation>
+    </message>
+    <message>
+        <source>Save image data in label file</source>
+        <translation>将图像数据写入标签文件</translation>
+    </message>
+    <message>
+        <source>Embeds the image in the label JSON file.</source>
+        <translation>将图像嵌入标签 JSON 文件中。</translation>
+    </message>
+    <message>
+        <source>Keep previous annotation</source>
+        <translation>保留上一次的标注</translation>
+    </message>
+    <message>
+        <source>Keep previous zoom</source>
+        <translation>保留上一次的缩放</translation>
+    </message>
+    <message>
+        <source>Keep previous brightness/contrast</source>
+        <translation>保留上一次的亮度/对比度</translation>
+    </message>
+    <message>
+        <source>Fill polygon while drawing</source>
+        <translation>绘制过程中填充多边形</translation>
+    </message>
+    <message>
+        <source>Let shape points extend beyond the image, e.g. for partially visible objects.</source>
+        <translation>允许形状的点延伸到图像之外，例如用于部分可见的对象。</translation>
+    </message>
+    <message>
+        <source>Predefined labels</source>
+        <translation>预定义标签</translation>
+    </message>
+    <message>
+        <source>Label validation</source>
+        <translation>标签验证</translation>
+    </message>
+    <message>
+        <source>Sort labels</source>
+        <translation>标签排序</translation>
+    </message>
+    <message>
+        <source>Sort the label list alphabetically instead of keeping the provided order.</source>
+        <translation>按字母顺序排序标签列表，而非保留提供的顺序。</translation>
+    </message>
+    <message>
+        <source>Show label text field</source>
+        <translation>显示标签文本字段</translation>
+    </message>
+    <message>
+        <source>Label completion</source>
+        <translation>标签补全</translation>
+    </message>
+    <message>
+        <source>Starts with</source>
+        <translation>以…开头</translation>
+    </message>
+    <message>
+        <source>Contains</source>
+        <translation>包含</translation>
+    </message>
+    <message>
+        <source>Default model</source>
+        <translation>默认模型</translation>
+    </message>
+    <message>
+        <source>EfficientSam (speed)</source>
+        <translation>EfficientSam (速度)</translation>
+    </message>
+    <message>
+        <source>EfficientSam (accuracy)</source>
+        <translation>EfficientSam (准确度)</translation>
+    </message>
+    <message>
+        <source>Sam (speed)</source>
+        <translation>Sam (速度)</translation>
+    </message>
+    <message>
+        <source>Sam (balanced)</source>
+        <translation>Sam (均衡)</translation>
+    </message>
+    <message>
+        <source>Sam (accuracy)</source>
+        <translation>Sam (准确度)</translation>
+    </message>
+    <message>
+        <source>Sam2 (speed)</source>
+        <translation>Sam2 (速度)</translation>
+    </message>
+    <message>
+        <source>Sam2 (balanced)</source>
+        <translation>Sam2 (均衡)</translation>
+    </message>
+    <message>
+        <source>Sam2 (accuracy)</source>
+        <translation>Sam2 (准确度)</translation>
+    </message>
+    <message>
+        <source>Sam3</source>
+        <translation>Sam3</translation>
+    </message>
+    <message>
+        <source>Suppress existing Shape matches</source>
+        <translation>抑制与已有形状匹配的结果</translation>
+    </message>
+    <message>
+        <source>When an AI Assist candidate matches an existing Shape, highlight that Shape instead of creating a new Shape.</source>
+        <translation>当 AI 辅助的候选结果与已有形状匹配时，高亮该形状，而不是创建新的形状。</translation>
+    </message>
+    <message>
+        <source>Settings</source>
+        <translation>设置</translation>
+    </message>
+    <message>
+        <source>Open config file as text…</source>
+        <translation>以文本方式打开配置文件…</translation>
+    </message>
+    <message>
+        <source>Edits made in the text file apply after restart</source>
+        <translation>在文本文件中所做的修改将在重启后生效</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>关闭</translation>
+    </message>
+    <message>
+        <source>BETA</source>
+        <translation>BETA</translation>
+    </message>
+    <message>
+        <source>(none)</source>
+        <translation>（无）</translation>
+    </message>
+    <message>
+        <source>one item per line</source>
+        <translation>每行一项</translation>
+    </message>
+    <message>
+        <source>Configuration Error</source>
+        <translation>配置错误</translation>
+    </message>
+    <message>
+        <source>Predefined labels cannot be empty while Label validation is set to exact. Disable exact validation first.</source>
+        <translation>当标签验证设置为“exact”时，预定义标签不能为空。请先禁用“exact”验证。</translation>
+    </message>
+    <message>
+        <source>Language</source>
+        <translation>语言</translation>
+    </message>
+    <message>
+        <source>Takes effect after restart.</source>
+        <translation>重新启动后生效。</translation>
+    </message>
+    <message>
+        <source>System default</source>
+        <translation>系统默认</translation>
+    </message>
+    <message>
+        <source>Predefined image flags</source>
+        <translation>预定义图像标记</translation>
+    </message>
+</context>
+<context>
+    <name>SettingsPage</name>
+    <message>
+        <source>Settings sections</source>
+        <translation>设置分区</translation>
     </message>
 </context>
 </TS>

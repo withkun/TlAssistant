@@ -11,33 +11,39 @@
 #include "tl_shape.h"
 
 
-QString format_label_with_color_dot(const QString &text, const std::vector<int32_t> &color);
-QString format_shape_label(const TlShape &shape, const std::vector<int32_t> &fill_rgb);
+extern const int32_t LABEL_COLOR_ROLE;
 
-class HTMLDelegate: public QStyledItemDelegate {
+QString format_shape_label(const TlShape &shape);
+
+class TrailingColorDotDelegate: public QStyledItemDelegate {
 public:
-    explicit HTMLDelegate(QObject *parent = nullptr);
+    explicit TrailingColorDotDelegate(QObject *parent=nullptr) : QStyledItemDelegate(parent) {}
 
-    void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
     QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const override;
 
+    void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
+
     static QSize default_size_hint();
+
+    static const char *DOT_;
 
 private:
     QTextDocument                      *doc_{nullptr};
 };
 
-class ShapeListItem : public QStandardItem {
+class LabelListItem : public QStandardItem {
 public:
-    ShapeListItem(const QString &text, const TlShape &shape={});
+    explicit LabelListItem(const QString &text="", const TlShape &shape={});
 
-    ShapeListItem *clone() const override;
+    LabelListItem *clone() const override;
+
     void set_shape(const TlShape &shape);
+    void set_label(const QString &text, const std::tuple<int, int, int> &color);
     TlShape shape() const;
 };
 
 // ShapeItemModel -> QStandardItemModel -> QAbstractItemModel -> QObject
-class ShapeItemModel : public QStandardItemModel {
+class ListItemModel : public QStandardItemModel {
     Q_OBJECT
 public:
     bool removeRows(int row, int count, const QModelIndex &parent) override;
@@ -58,44 +64,42 @@ public:
 // QListView是列表形式的展示控件
 // QListWidget继承自QListView, 是表格形式的展示控件
 // 本质区别: QListView基于Model(需要自己建模), QListWidget基于Item
-class ShapeListView : public QListView {
+class LabelListWidget : public QListView {
     Q_OBJECT
 public:
-    explicit ShapeListView(QWidget *parent = nullptr);
+    explicit LabelListWidget(QWidget *parent=nullptr);
 
 protected:
     void mousePressEvent(QMouseEvent *e) override;
     void mouseReleaseEvent(QMouseEvent *e) override;
 
 signals:
+    void item_double_clicked(LabelListItem *item);
+    void item_selection_changed(const QList<LabelListItem *> &selected, const QList<LabelListItem *> &deselect);
+    void item_changed(LabelListItem *item);
     void item_dropped();
-    void item_changed(ShapeListItem *item);
-    void item_double_clicked(ShapeListItem *item);
-    void item_selection_changed(const QList<ShapeListItem *> &selected, const QList<ShapeListItem *> &deselect);
-
-public slots:
 
 private:
-    ShapeItemModel                     *model_{};
-    QList<ItemSnapshot>                 press_snapshot_;
+    ListItemModel                          *model_{};
+    QList<ItemSnapshot>                     press_snapshot_;
 
 public:
     void on_item_dropped();
     void on_item_changed(QStandardItem *item);
     void on_item_selection_changed(const QItemSelection &selected, const QItemSelection &deselected);
     void on_item_double_clicked(const QModelIndex &index);
-    QList<ShapeListItem *> selected_items();
-    QList<ShapeListItem *> selection_at_press();
-    ShapeListItem *resolve_item(const QPersistentModelIndex &index);
-    void scroll_to_item(ShapeListItem *item);
-    void add_item(ShapeListItem *item);
-    void removeItem(ShapeListItem *item);
-    void select_item(ShapeListItem *item);
-    ShapeListItem *find_item_by_shape(const TlShape &shape);
+    QList<LabelListItem *> selected_items();
+    QList<LabelListItem *> selection_at_press();
+    LabelListItem *resolve_item(const QPersistentModelIndex &index);
+    void scroll_to_item(LabelListItem *item);
+    void add_item(LabelListItem *item);
+    void remove_item(LabelListItem *item);
+    void select_item(LabelListItem *item);
+    LabelListItem *find_item_by_shape(const TlShape &shape);
 
     void clear();
     int32_t len() const;
-    QList<ShapeListItem *> items() const;
+    QList<LabelListItem *> items() const;
     bool empty() const {
         return this->model_->rowCount() == 0;
     }

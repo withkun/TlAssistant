@@ -9,28 +9,9 @@
 #include <QMenu>
 #include <QBuffer>
 #include <QCryptographicHash>
+#include <QGuiApplication>
+#include <QStyleHints>
 
-
-std::vector<QColor> label_colormap() {
-    std::vector<QColor> colormap(256);
-    for (int i = 0; i < 256; ++i) {
-        // 提取标签i的8个二进制位
-        const uint8_t b0 = (i >> 0) & 1;
-        const uint8_t b1 = (i >> 1) & 1;
-        const uint8_t b2 = (i >> 2) & 1;
-        const uint8_t b3 = (i >> 3) & 1;
-        const uint8_t b4 = (i >> 4) & 1;
-        const uint8_t b5 = (i >> 5) & 1;
-        const uint8_t b6 = (i >> 6) & 1;
-        const uint8_t b7 = (i >> 7) & 1;
-        // 合成RGB通道色彩值.
-        const uint8_t r = (b0 << 7) | (b3 << 6) | (b6 << 5);
-        const uint8_t g = (b1 << 7) | (b4 << 6) | (b7 << 5);
-        const uint8_t b = (b2 << 7) | (b5 << 6);
-        colormap[i] = {r, g, b};
-    }
-    return colormap;
-}
 
 // 常见空白字符(C风格isspace范围)
 static constexpr std::string WHITESPACE = " \t\n\r\f\v";
@@ -57,7 +38,11 @@ std::vector<std::string> split(const std::string &s, const char delim) {
     return tokens;
 }
 
-QIcon utils::newIcon(const QString &icon) {
+void update_flags(QMap<QString, bool> &flags, const QMap<QString, bool> &overrides) {
+
+}
+
+QIcon utils::new_icon(const QString &icon) {
     const QString icons_dir(":/icons/" + icon + ".png");
     return QIcon(icons_dir);
 }
@@ -450,6 +435,15 @@ cv::Mat utils::img_b64_to_arr(const std::string &b64_string) {
 //    img_data = img_pil_to_data(img_pil)
 //    return img_data
 
+void utils::apply_color_theme(const QString &theme) {
+    const QMap<QString, Qt::ColorScheme> scheme_by_theme {
+        { "system", Qt::ColorScheme::Unknown },
+        { "light", Qt::ColorScheme::Light },
+        { "dark", Qt::ColorScheme::Dark },
+    };
+    const auto scheme = scheme_by_theme.value(theme, Qt::ColorScheme::Unknown);
+    QGuiApplication::styleHints()->setColorScheme(scheme);
+}
 
 void toFile(const std::string &name, const Ort::Value &tensor) {
     const auto dataDims = tensor.GetTensorTypeAndShapeInfo().GetShape();

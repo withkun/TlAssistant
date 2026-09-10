@@ -11,7 +11,7 @@ class AiPromptAnnotation : public QWidget {
     Q_OBJECT
 public:
     explicit AiPromptAnnotation(const std::string &default_model, const std::function<void()> &on_submit, QWidget *parent = nullptr);
-    ~AiPromptAnnotation() override;
+    ~AiPromptAnnotation() override = default;
 
     void setEnabled(bool a0);
     bool eventFilter(QObject *watched, QEvent *event) override;

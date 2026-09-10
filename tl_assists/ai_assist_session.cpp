@@ -11,6 +11,11 @@ AiAssistSession::AiAssistSession(Canvas *canvas, const std::string &model_name, 
     this->ai_assist_thread_ = std::make_unique<AiAssistThread>(this);
 }
 
+void AiAssistSession::clear() {
+    this->ai_assist_points_.clear();
+    this->ai_assist_shapes_.clear();
+}
+
 // AI辅助需要加载模型与图像编码耗时较长, 需要防止GUI界面假死, 这里进行异步处理拆分.
 QList<TlShape> AiAssistSession::submit_propose_shapes(const QPixmap &image,
                                                       const size_t image_id,

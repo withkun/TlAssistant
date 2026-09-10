@@ -4,19 +4,22 @@
 #include <QListWidget>
 
 
-class EscapableQListWidget : public QListWidget {
+class EscapableListWidget : public QListWidget {
     Q_OBJECT
+public:
+    explicit EscapableListWidget(QWidget *parent=nullptr) : QListWidget(parent) {}
+
 protected:
     void keyPressEvent(QKeyEvent *keyEvent) override;
 };
 
-class LabelList : public EscapableQListWidget {
+class UniqueLabelList : public EscapableListWidget {
     Q_OBJECT
 public:
-    explicit LabelList();
+    explicit UniqueLabelList(QWidget *parent=nullptr);
 
     QListWidgetItem *find_label_item(const QString &label);
-    void add_label_item(const QString &label, const std::vector<int32_t> &color);
+    void add_label_item(const QString &label, const std::tuple<int, int, int> &color);
 
 protected:
     void mousePressEvent(QMouseEvent *mouseEvent) override;

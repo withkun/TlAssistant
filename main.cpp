@@ -8,6 +8,7 @@
 #include <QMessageBox>
 #include <QStyleFactory>
 #include <QQuickStyle>
+#include <QFileInfo>
 
 #include "spdlog/spdlog.h"
 #include "spdlog/async.h"
@@ -21,10 +22,13 @@
 
 
 const std::string args{
-    "{app_config   | app_config.json    | application config file                   }"
-    "{file_name    |                    | file name for open                        }"
-    "{output_dir   |                    | result output directory                   }"
-    "{console      | true               | show log console                          }"
+    "{app_config   | app_config.json    | application config file                                   }"
+    "{file_name    |                    | file name for open                                        }"
+    "{output       |                    | output directory for saving annotation JSON files         }"
+    "{config       |                    | config file or yaml-format string                         }"
+    "{epsilon      |                    | epsilon to find nearest vertex on canvas                  }"
+    "{flags        |                    | comma separated list of flags OR file containing flags    }"
+    "{console      | true               | show log console                                          }"
 };
 
 // 初始化日志系统
@@ -60,7 +64,7 @@ static void slogInit(const bool console) {
     SPDLOG_INFO("Program started ...");
 }
 
-void qMessageHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg) {
+static void qMessageHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg) {
     const static std::map<QtMsgType, spdlog::level::level_enum> levels {
         {QtFatalMsg,    spdlog::level::critical},
         {QtCriticalMsg, spdlog::level::critical},
@@ -79,11 +83,32 @@ void qMessageHandler(QtMsgType type, const QMessageLogContext &context, const QS
     logger->log(spdlog::source_loc{context.file, context.line, context.function}, lv, localMsg.constData());
 }
 
+QList<QString> parse_list_arg(const QString &value) {
+    if (QFileInfo(value).isFile()) {
+        QFile file(value);
+        if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            QStringList result;
+            QTextStream in(&file);
+            in.setEncoding(QStringConverter::Utf8);
+            while (!in.atEnd()) {
+                const auto line = in.readLine().trimmed();
+                if (!line.isEmpty()) {
+                    result.append(line);
+                }
+            }
+            file.close();
+            return result;
+        }
+    }
+
+    return value.split(',', Qt::SkipEmptyParts);
+}
+
 int main(int argc, char *argv[]) {
     QApplication app(argc, argv);
 
     // 解析命令行参数
-    cv::CommandLineParser parser(argc, argv, args);
+    const cv::CommandLineParser parser(argc, argv, args);
     cv::utils::logging::setLogLevel(cv::utils::logging::LogLevel::LOG_LEVEL_INFO);
     AppConfig &appConfig = AppConfig::instance();
     appConfig.load();
@@ -102,8 +127,9 @@ int main(int argc, char *argv[]) {
     QApplication::setStyle(QStyleFactory::create("Fusion"));
     QQuickStyle::setStyle("Fusion");
 
+    QList<QString> flags = parse_list_arg(QString::fromStdString(parser.get<std::string>("flags")));
     QString config_file;
-    YAML::Node config_overrides;
+    QMap<QString, QVariant> config_overrides;
     if (!appConfig.config_file_.empty()) {
         try {
             config_file = QString::fromStdString(appConfig.config_file_);
@@ -117,7 +143,7 @@ int main(int argc, char *argv[]) {
         file_name = QString::fromStdString(v_file_name);
     }
     QString output_dir;
-    const auto v_output_dir = parser.get<std::string>("output_dir");
+    const auto v_output_dir = parser.get<std::string>("output");
     if (!v_output_dir.empty()) {
         output_dir = QString::fromStdString(v_output_dir);
     }
