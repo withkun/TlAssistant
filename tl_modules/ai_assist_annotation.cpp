@@ -3,6 +3,7 @@
 #include "info_button.h"
 #include "spdlog/spdlog.h"
 #include "common/format_qt.h"
+#include "config/app_config.h"
 #include "tl_modules/ai_models.h"
 
 #include <QLabel>
@@ -93,6 +94,7 @@ void AiAssistAnnotation::init_ui(
     this->model_combo_->setCurrentIndex(model_index);
     QObject::connect(this->model_combo_, &QComboBox::currentIndexChanged, [this, on_model_changed](int index) {
         on_model_changed(this->model_combo_->itemData(index).toString().toStdString());
+        AppConfig::instance().ai_assist_name_ = this->model_combo_->itemText(index).toStdString();
     });
 
     this->output_format_combo_->setCurrentIndex(0);

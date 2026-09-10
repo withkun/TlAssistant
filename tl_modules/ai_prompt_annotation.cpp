@@ -1,4 +1,5 @@
 #include "ai_prompt_annotation.h"
+#include "config/app_config.h"
 #include "info_button.h"
 
 #include <QLabel>
@@ -80,6 +81,9 @@ void AiPromptAnnotation::init_ui(const QString &default_model, const std::functi
         }
     }
     this->model_combo_->setCurrentIndex(model_index);
+    QObject::connect(this->model_combo_, &QComboBox::currentIndexChanged, [this](int index) {
+        AppConfig::instance().ai_prompt_name_ = this->model_combo_->itemText(index).toStdString();
+    });
     settings_layout->addWidget(model_combo_, 1);
 
     // Size and mute these via QFont and a palette role, never a stylesheet:

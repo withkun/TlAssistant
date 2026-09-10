@@ -2,7 +2,6 @@
 
 #include "common/format_qt.h"
 #include "common/np_utils.h"
-#include "config/app_config.h"
 #include "tl_widgets/tl_download.h"
 
 #include <QApplication>
@@ -387,7 +386,6 @@ void Canvas::set_ai_model_name(const std::string &model_name) {
         return;
     this->ai_assist_session_->model_name_ = model_name;
     this->clear_ai_existing_shape_highlights();
-    AppConfig::instance().ai_assist_name_ = model_name;
 }
 
 void Canvas::set_ai_output_format(const std::string &output_format) {
