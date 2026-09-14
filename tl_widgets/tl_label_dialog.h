@@ -28,14 +28,14 @@ public:
 class LabelDialog : public QDialog {
     Q_OBJECT
 public:
-    LabelDialog(QWidget *parent,
-                const QStringList &labels={},
-                bool sort_labels=true,
-                bool show_text_field=true,
-                const QString &completion="startswith",
-                const QMap<QString, bool> &fit_to_content={},
-                const QMap<QString, QList<QString>> &flags={},
-                const QList<QString> &label_history={});
+    explicit LabelDialog(QWidget *parent,
+                         const QStringList &labels={},
+                         bool sort_labels=true,
+                         bool show_text_field=true,
+                         const QString &completion="startswith",
+                         const QMap<QString, bool> &fit_to_content={},
+                         const QMap<QString, QList<QString>> &flags={},
+                         const QList<QString> &label_history={});
 
     QMap<QString, bool>                 fit_to_content_;
     QMap<QString, QList<QString>>       flags_;
@@ -64,14 +64,14 @@ public:
     void on_item_double_clicked(QListWidgetItem *item);
     void on_ok_clicked();
     void clear_flag_checkboxes();
-    void set_flag_checkboxes(QMap<QString, bool> &flags);
-    QMap<QString, bool> collect_flags();
+    void set_flag_checkboxes(const QMap<QString, bool> &flags);
+    QMap<QString, bool> collect_flags() const;
     void fit_label_list_to_content();
     void move_within_screen(const QPoint &target);
     void clamp_within_screen(const QPoint &target);
 
     void set_predefined_labels(const QList<QString> &labels);
     std::tuple<QString, QMap<QString, bool>, int32_t, QString>
-    popup(QString text, bool move=true, QPoint position=QPoint(), QMap<QString, bool> flags={}, int32_t group_id=None, QString description="", bool flags_disabled=false);
+    popup(const QString &text, bool move=true, const QPoint &position=QPoint(), const QMap<QString, bool> &flags={}, int32_t group_id=None, const QString &description="", bool flags_disabled=false);
 };
 #endif //__INC_LABEL_DIALOG_H

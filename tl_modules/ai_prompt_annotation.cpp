@@ -72,11 +72,11 @@ void AiPromptAnnotation::init_ui(const QString &default_model, const std::functi
     settings_layout->setSpacing(4);
 
     this->model_combo_ = new QComboBox();
-    for (const auto &[model_id, model_display] : available_models_)
-        model_combo_->addItem(model_display, model_id);
+    for (const auto &[model_name, display_name] : available_models_)
+        model_combo_->addItem(display_name, model_name);
     int32_t model_index = 0;
     for (auto i = 0; i < available_models_.size(); ++i) {
-        if (available_models_[i].first == default_model) {
+        if (available_models_[i].second == default_model) {
             model_index = i;
         }
     }

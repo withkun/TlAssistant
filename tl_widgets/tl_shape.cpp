@@ -11,7 +11,7 @@
 #include <QUuid>
 
 
-static const QSet<QString> ShapeType{
+const QSet<QString> ShapeType{
     "polygon",
     "rectangle",
     "oriented_rectangle",

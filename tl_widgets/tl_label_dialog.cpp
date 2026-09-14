@@ -106,7 +106,6 @@ LabelDialog::LabelDialog(QWidget *parent,
 
     // Set up completer bound to label_list's model
     auto *completer = this->make_completer(completion);  // 自动补全
-    //completer->setModel(this->label_list_->model());
     this->edit_->setCompleter(completer);
     this->edit_->set_list_widget(this->label_list_);
 
@@ -264,13 +263,13 @@ void LabelDialog::set_predefined_labels(const QList<QString> &labels) {
 
 std::tuple<QString, QMap<QString, bool>, int32_t, QString> LabelDialog::
 popup(
-    QString text,
-    bool move,
-    QPoint position,
-    QMap<QString, bool> flags,
-    int32_t group_id,
-    QString description,
-    bool flags_disabled
+    const QString &text,
+    const bool move,
+    const QPoint &position,
+    const QMap<QString, bool> &flags,
+    const int32_t group_id,
+    const QString &description,
+    const bool flags_disabled
 ) {
     // Drop the previous popup's checkboxes and their remembered states so a
     // fresh popup starts unchecked. This has to precede setText() below,
@@ -329,63 +328,63 @@ popup(
     return {{}, {}, None, {}};
 }
 
-void LabelDialog::set_flag_checkboxes(QMap<QString, bool> &flags) {
-    //self._clear_flag_checkboxes()
-    //for key, checked in flags.items():
-    //    checkbox = QtWidgets.QCheckBox(key)
-    //    checkbox.setChecked(checked)
-    //    checkbox.setEnabled(not self._flags_disabled)
-    //    self._flag_checkboxes[key] = checkbox
-    //    self._flags_layout.addWidget(checkbox)
-    //    # A widget added to a visible layout stays hidden until the event
-    //    # loop activates the layout, and the layout counts hidden widgets as
-    //    # empty, so the container hint below would be momentarily 0 and
-    //    # would pin the scroll area shut for the rest of the popup.
-    //    checkbox.show()
-    //
-    //content_height = self._flags_container.sizeHint().height()
-    //self._flags_scroll.setFixedHeight(min(content_height, _FLAGS_SCROLL_MAX_HEIGHT))
+void LabelDialog::set_flag_checkboxes(const QMap<QString, bool> &flags) {
+    this->clear_flag_checkboxes();
+    for (const auto &[key, checked] : flags.asKeyValueRange()) {
+        const auto checkbox = new QCheckBox(key);
+        checkbox->setChecked(checked);
+        checkbox->setEnabled(!this->flags_disabled_);
+        this->flag_checkboxes_[key] = checkbox;
+        this->flags_layout_->addWidget(checkbox);
+        // A widget added to a visible layout stays hidden until the event
+        // loop activates the layout, and the layout counts hidden widgets as
+        // empty, so the container hint below would be momentarily 0 and
+        // would pin the scroll area shut for the rest of the popup.
+        checkbox->show();
+    }
+    const auto content_height = this->flags_container_->sizeHint().height();
+    this->flags_scroll_->setFixedHeight(std::min(content_height, FLAGS_SCROLL_MAX_HEIGHT));
 }
 
-QMap<QString, bool> LabelDialog::collect_flags() {
-    //return {key: cb.isChecked() for key, cb in self._flag_checkboxes.items()}
-    return {};
+QMap<QString, bool> LabelDialog::collect_flags() const {
+    const auto flags = this->flag_checkboxes_.toStdMap() | std::views::transform([](const auto &p) { return std::make_pair(p.first, p.second->isChecked()); }) | std::ranges::to<std::map<QString, bool>>();
+    return QMap<QString, bool>(flags);
 }
 
 void LabelDialog::fit_label_list_to_content() {
-    //if self._fit_to_content["row"]:
-    //    self.label_list.setMinimumHeight(
-    //        self.label_list.sizeHintForRow(0) * self.label_list.count() + 2
-    //    )
-    //if self._fit_to_content["column"]:
-    //    self.label_list.setMinimumWidth(self.label_list.sizeHintForColumn(0) + 2)
+    if (this->fit_to_content_["row"])
+        this->label_list_->setMinimumHeight(
+            this->label_list_->sizeHintForRow(0) * this->label_list_->count() + 2
+        );
+    if (this->fit_to_content_["column"])
+        this->label_list_->setMinimumWidth(this->label_list_->sizeHintForColumn(0) + 2);
 }
 
 void LabelDialog::move_within_screen(const QPoint &target) {
-    //self.adjustSize()
-    //# setGeometry() anchors the client area, unlike move() which anchors the
-    //# window frame: the content corner lands at target, not the title bar's.
-    //self.setGeometry(QtCore.QRect(target, self.size()))
-    //self._clamp_within_screen(target)
+    this->adjustSize();
+    // setGeometry() anchors the client area, unlike move() which anchors the
+    // window frame: the content corner lands at target, not the title bar's.
+    this->setGeometry(QRect(target, this->size()));
+    this->clamp_within_screen(target);
 }
 
 void LabelDialog::clamp_within_screen(const QPoint &target) {
-    //screen = (
-    //    QtGui.QGuiApplication.screenAt(target)
-    //    or QtGui.QGuiApplication.primaryScreen()
-    //)
-    //if screen is None:
-    //    return
-    //available = screen.availableGeometry()
-    //
-    //// Nudge by the actual frame overflow (frameGeometry() includes the
-    //// window-manager decoration) so the title bar and borders stay on screen,
-    //// not just the content rect.
-    //frame = self.frameGeometry()
-    //dx = min(0, available.right() - frame.right())
-    //dx = max(dx, available.left() - frame.left())
-    //dy = min(0, available.bottom() - frame.bottom())
-    //dy = max(dy, available.top() - frame.top())
-    //if dx or dy:
-    //    self.move(self.x() + dx, self.y() + dy)
+    const auto screen = (QGuiApplication::screenAt(target) != nullptr
+        ? QGuiApplication::screenAt(target)
+        : QGuiApplication::primaryScreen()
+    );
+    if (screen == nullptr)
+        return;
+    const auto available = screen->availableGeometry();
+
+    // Nudge by the actual frame overflow (frameGeometry() includes the
+    // window-manager decoration) so the title bar and borders stay on screen,
+    // not just the content rect.
+    const auto frame = this->frameGeometry();
+    auto dx = std::min(0, available.right() - frame.right());
+         dx = std::max(dx, available.left() - frame.left());
+    auto dy = std::min(0, available.bottom() - frame.bottom());
+         dy = std::max(dy, available.top() - frame.top());
+    if (dx || dy)
+        this->move(this->x() + dx, this->y() + dy);
 }

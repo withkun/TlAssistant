@@ -24,7 +24,7 @@
 
 
 #define _appname_                           tr("tl assistant")
-#define _version_                           "1.0.0.0"
+#define _version_                           "7.1.0"
 
 enum class ZoomMode : int32_t {
     FIT_WIDTH,

@@ -10,6 +10,8 @@
 #include <QMap>
 
 
+extern const QSet<QString> ShapeType;
+
 class TlShape {
 public:
     TlShape(const QString &label="",

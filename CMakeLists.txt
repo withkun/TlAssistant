@@ -25,7 +25,7 @@ set(CMAKE_CUDA_ARCHITECTURES 86)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 set(CMAKE_CUDA_STANDARD 20)
 
-set(ONNX_RUNTIME_ROOT d:/3rd_party/ONNXRuntime-win-x64-gpu-1.28.2)
+set(ONNX_RUNTIME_ROOT d:/3rd_party/ONNXRuntime-win-x64-gpu-1.30.0)
 
 set(OpenCV_DIR d:/3rd_party/opencv_5.0.0)
 include(${OpenCV_DIR}/OpenCVConfig.cmake)
